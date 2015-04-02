@@ -1,29 +1,28 @@
 package org.broadinstitute.hellbender.transformers;
 
 import com.google.cloud.dataflow.sdk.transforms.SerializableFunction;
-import htsjdk.samtools.SAMRecord;
+import org.broadinstitute.hellbender.utils.read.MutableGATKRead;
 
-import java.io.Serializable;
 import java.util.Objects;
 import java.util.function.UnaryOperator;
 
-@FunctionalInterface
 /**
- * Classes which perform transformations from SAMRecord -> SAMRecord should implement this interface by overriding {@link #apply(SAMRecord)
+ * Classes which perform transformations from MutableRead -> MutableRead should implement this interface by overriding {@link #apply(org.broadinstitute.hellbender.utils.read.MutableGATKRead)
  */
-public interface ReadTransformer extends UnaryOperator<SAMRecord>, SerializableFunction<SAMRecord, SAMRecord>{
+@FunctionalInterface
+public interface ReadTransformer extends UnaryOperator<MutableGATKRead>, SerializableFunction<MutableGATKRead, MutableGATKRead>{
     //HACK: These methods are a hack to get to get the type system to accept compositions of ReadTransformers.
 
     @SuppressWarnings("overloads")
     default ReadTransformer andThen(ReadTransformer after) {
         Objects.requireNonNull(after);
-        return (SAMRecord r) -> after.apply(apply(r));
+        return (MutableGATKRead r) -> after.apply(apply(r));
     }
 
     @SuppressWarnings("overloads")
     default ReadTransformer compose(ReadTransformer before) {
         Objects.requireNonNull(before);
-        return (SAMRecord r) -> apply(before.apply(r));
+        return (MutableGATKRead r) -> apply(before.apply(r));
     }
 
     static ReadTransformer identity(){

@@ -1,11 +1,13 @@
 package org.broadinstitute.hellbender.tools.recalibration.covariates;
 
-import htsjdk.samtools.SAMRecord;
+import htsjdk.samtools.SAMFileHeader;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.tools.recalibration.ReadCovariates;
 import org.broadinstitute.hellbender.tools.recalibration.RecalibrationArgumentCollection;
 import org.broadinstitute.hellbender.utils.NGSPlatform;
 import org.broadinstitute.hellbender.utils.SequencerFlowClass;
+import org.broadinstitute.hellbender.utils.read.MutableGATKRead;
+import org.broadinstitute.hellbender.utils.read.ReadUtils;
 
 import java.io.Serializable;
 
@@ -36,12 +38,12 @@ public final class CycleCovariate implements Covariate {
 
     // Used to pick out the covariate's value from attributes of the read
     @Override
-    public void recordValues(final SAMRecord read, final ReadCovariates values) {
-        final NGSPlatform ngsPlatform = default_platform == null ? NGSPlatform.fromRead(read) : NGSPlatform.fromReadGroupPL(default_platform);
+    public void recordValues(final MutableGATKRead read, final SAMFileHeader header, final ReadCovariates values) {
+        final NGSPlatform ngsPlatform = default_platform == null ? NGSPlatform.fromRead(read, header) : NGSPlatform.fromReadGroupPL(default_platform);
 
         // Discrete cycle platforms
         if (ngsPlatform.getSequencerType() == SequencerFlowClass.DISCRETE) {
-            final int readLength = read.getReadLength();
+            final int readLength = read.getLength();
             for (int i = 0; i < readLength; i++) {
                 final int substitutionKey = cycleKey(i, read, false, MAXIMUM_CYCLE_VALUE);
                 final int indelKey        = cycleKey(i, read, true, MAXIMUM_CYCLE_VALUE);
@@ -51,14 +53,14 @@ public final class CycleCovariate implements Covariate {
 
         // Flow cycle platforms
         else if (ngsPlatform.getSequencerType() == SequencerFlowClass.FLOW) {
-            throw new UserException("The platform (" + read.getReadGroup().getPlatform()
-                    + ") associated with read group " + read.getReadGroup()
+            throw new UserException("The platform (" + ReadUtils.getPlatformForRead(read, header)
+                    + ") associated with read group " + ReadUtils.getSAMReadGroupRecordForRead(read, header)
                     + " is not a supported platform.");
         }
         // Unknown platforms
         else {
-            throw new UserException("The platform (" + read.getReadGroup().getPlatform()
-                    + ") associated with read group " + read.getReadGroup()
+            throw new UserException("The platform (" + ReadUtils.getPlatformForRead(read, header)
+                    + ") associated with read group " + ReadUtils.getSAMReadGroupRecordForRead(read, header)
                     + " is not a recognized platform. Allowable options are " + NGSPlatform.knownPlatformsString());
         }
     }
@@ -87,10 +89,10 @@ public final class CycleCovariate implements Covariate {
      * @param maxCycle max value of the base to compute the key for
      *                 (this method throws UserException if the computed absolute value of the cycle number is higher than this value).
      */
-    public static int cycleKey(final int baseNumber, final SAMRecord read, final boolean indel, final int maxCycle) {
-        final boolean isNegStrand = read.getReadNegativeStrandFlag();
-        final boolean isSecondInPair = read.getReadPairedFlag() && read.getSecondOfPairFlag();
-        final int readLength = read.getReadLength();
+    public static int cycleKey(final int baseNumber, final MutableGATKRead read, final boolean indel, final int maxCycle) {
+        final boolean isNegStrand = read.isReverseStrand();
+        final boolean isSecondInPair = read.isPaired() && read.isSecondOfPair();
+        final int readLength = read.getLength();
 
         final int readOrderFactor = isSecondInPair ? -1 : 1;
         final int increment;

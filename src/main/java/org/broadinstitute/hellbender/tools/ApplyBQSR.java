@@ -1,10 +1,7 @@
 package org.broadinstitute.hellbender.tools;
 
 import htsjdk.samtools.SAMFileHeader;
-import htsjdk.samtools.SAMFileWriter;
 import htsjdk.samtools.SAMFileWriterFactory;
-import htsjdk.samtools.SAMRecord;
-import htsjdk.samtools.util.CloserUtil;
 import org.broadinstitute.hellbender.cmdline.Argument;
 import org.broadinstitute.hellbender.cmdline.CommandLineProgramProperties;
 import org.broadinstitute.hellbender.cmdline.StandardArgumentDefinitions;
@@ -16,6 +13,8 @@ import org.broadinstitute.hellbender.transformers.BQSRReadTransformer;
 import org.broadinstitute.hellbender.transformers.ReadTransformer;
 import org.broadinstitute.hellbender.utils.QualityUtils;
 import org.broadinstitute.hellbender.utils.read.ReadUtils;
+import org.broadinstitute.hellbender.utils.read.MutableGATKRead;
+import org.broadinstitute.hellbender.utils.read.SAMFileGATKReadWriter;
 
 import java.io.File;
 
@@ -79,25 +78,27 @@ public final class ApplyBQSR extends ReadWalker{
     @Argument(fullName = "globalQScorePrior", shortName = "globalQScorePrior", doc = "Global Qscore Bayesian prior to use for BQSR", optional = true)
     public double globalQScorePrior = -1.0;
 
-    private SAMFileWriter outputWriter;
+    private SAMFileGATKReadWriter outputWriter;
 
     private ReadTransformer transform;
 
     @Override
     public void onTraversalStart() {
-        final SAMFileHeader outputHeader = ReadUtils.clone(getHeaderForReads());
-        outputWriter = new SAMFileWriterFactory().makeWriter(outputHeader, true, OUTPUT, referenceArguments.getReferenceFile());
-        transform = new BQSRReadTransformer(BQSR_RECAL_FILE, quantizationLevels, disableIndelQuals, PRESERVE_QSCORES_LESS_THAN, emitOriginalQuals, globalQScorePrior);
+        final SAMFileHeader outputHeader = ReadUtils.cloneSAMFileHeader(getHeaderForReads());
+        outputWriter = new SAMFileGATKReadWriter(new SAMFileWriterFactory().makeWriter(outputHeader, true, OUTPUT, referenceArguments.getReferenceFile()));
+        transform = new BQSRReadTransformer(outputHeader, BQSR_RECAL_FILE, quantizationLevels, disableIndelQuals, PRESERVE_QSCORES_LESS_THAN, emitOriginalQuals, globalQScorePrior);
     }
 
     @Override
-    public void apply( SAMRecord read, ReferenceContext referenceContext, FeatureContext featureContext ) {
-        outputWriter.addAlignment(transform.apply(read));
+    public void apply( MutableGATKRead read, ReferenceContext referenceContext, FeatureContext featureContext ) {
+        outputWriter.addRead(transform.apply(read));
     }
 
     @Override
     public Object onTraversalDone() {
-        CloserUtil.close(outputWriter);
+        if ( outputWriter != null ) {
+            outputWriter.close();
+        }
         return null;
     }
 
