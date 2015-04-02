@@ -1,6 +1,6 @@
 package org.broadinstitute.hellbender.tools.recalibration.covariates;
 
-import htsjdk.samtools.SAMRecord;
+import htsjdk.samtools.SAMFileHeader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.broadinstitute.hellbender.exceptions.GATKException;
@@ -10,6 +10,7 @@ import org.broadinstitute.hellbender.tools.recalibration.RecalibrationArgumentCo
 import org.broadinstitute.hellbender.utils.BaseUtils;
 import org.broadinstitute.hellbender.utils.clipping.ClippingRepresentation;
 import org.broadinstitute.hellbender.utils.clipping.ReadClipper;
+import org.broadinstitute.hellbender.utils.read.MutableGATKRead;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -56,10 +57,10 @@ public final class ContextCovariate implements Covariate {
     }
 
     @Override
-    public void recordValues(final SAMRecord read, final ReadCovariates values) {
+    public void recordValues(final MutableGATKRead read, final SAMFileHeader header, final ReadCovariates values) {
 
         // store the original bases and then write Ns over low quality ones
-        final byte[] originalBases = Arrays.copyOf(read.getReadBases(), read.getReadBases().length);
+        final byte[] originalBases = Arrays.copyOf(read.getBases(), read.getBases().length);
         final byte[] strandedBases = getStrandedBytes(read, lowQualTail);
 
         final List<Integer> mismatchKeys = contextWith(strandedBases, mismatchesContextSize, mismatchesKeyMask);
@@ -77,7 +78,7 @@ public final class ContextCovariate implements Covariate {
                 values.addCovariate(0, 0, 0, i);
         }
 
-        final boolean negativeStrand = read.getReadNegativeStrandFlag();
+        final boolean negativeStrand = read.isReverseStrand();
         for (int i = 0; i < readLength; i++) {
             final int readOffset = getStrandedOffset(negativeStrand, i, readLength);
             final int indelKey = indelKeys.get(i);
@@ -85,7 +86,7 @@ public final class ContextCovariate implements Covariate {
         }
 
         // put the original bases back in
-        read.setReadBases(originalBases);
+        read.setBases(originalBases);
     }
 
     /**
@@ -106,13 +107,13 @@ public final class ContextCovariate implements Covariate {
      * @param lowQTail every base quality lower than or equal to this in the tail of the read will be replaced with N.
      * @return bases of the read.
      */
-    public static byte[] getStrandedBytes(final SAMRecord read, final byte lowQTail) {
+    public static byte[] getStrandedBytes(final MutableGATKRead read, final byte lowQTail) {
 
         // Write N's over the low quality tail of the reads to avoid adding them into the context
-        final SAMRecord clippedRead = ReadClipper.clipLowQualEnds(read, lowQTail, ClippingRepresentation.WRITE_NS);
+        final MutableGATKRead clippedRead = ReadClipper.clipLowQualEnds(read, lowQTail, ClippingRepresentation.WRITE_NS);
 
-        final byte[] bases = clippedRead.getReadBases();
-        if (read.getReadNegativeStrandFlag()) {
+        final byte[] bases = clippedRead.getBases();
+        if (read.isReverseStrand()) {
             return BaseUtils.simpleReverseComplement(bases);
         } else {
             return bases;

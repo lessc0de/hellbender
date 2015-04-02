@@ -19,6 +19,8 @@ import org.broadinstitute.hellbender.dev.pipelines.bqsr.BaseRecalOutput;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.utils.IntervalUtils;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
+import org.broadinstitute.hellbender.utils.dataflow.DataflowUtils;
+import org.broadinstitute.hellbender.utils.read.MutableGATKRead;
 import org.broadinstitute.hellbender.utils.test.BaseTest;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -43,8 +45,8 @@ public final class ReadsSourceTest extends BaseTest {
     public void testGetReadPCollectionLocal(){
         Pipeline p = GATKTestPipeline.create();
         ReadsSource source = new ReadsSource(bam.getAbsolutePath(), p);
-        DataflowWorkarounds.registerGenomicsCoders(p);
-        PCollection<Read> reads = source.getReadPCollection(ImmutableList.of(new SimpleInterval("chr7", 1, 404)), ValidationStringency.DEFAULT_STRINGENCY);
+        DataflowUtils.registerGATKCoders(p);
+        PCollection<MutableGATKRead> reads = source.getReadPCollection(ImmutableList.of(new SimpleInterval("chr7", 1, 404)), ValidationStringency.DEFAULT_STRINGENCY);
         PCollection<Long> count = reads.apply(Count.globally());
         DataflowAssert.thatSingleton(count).isEqualTo(7L);
         p.run();

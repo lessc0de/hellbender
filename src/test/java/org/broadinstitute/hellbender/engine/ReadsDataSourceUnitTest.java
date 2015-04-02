@@ -1,8 +1,8 @@
 package org.broadinstitute.hellbender.engine;
 
-import htsjdk.samtools.SAMRecord;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.exceptions.UserException;
+import org.broadinstitute.hellbender.utils.read.MutableGATKRead;
 import org.broadinstitute.hellbender.utils.test.BaseTest;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
@@ -70,8 +70,8 @@ public final class ReadsDataSourceUnitTest extends BaseTest {
     public void testSingleFileCompleteTraversal( final File samFile, final List<String> expectedReadNames ) {
         try (ReadsDataSource readsSource = new ReadsDataSource(samFile)) {
 
-            List<SAMRecord> reads = new ArrayList<>();
-            for (SAMRecord read : readsSource) {
+            List<MutableGATKRead> reads = new ArrayList<>();
+            for (MutableGATKRead read : readsSource) {
                 reads.add(read);
             }
 
@@ -80,7 +80,7 @@ public final class ReadsDataSourceUnitTest extends BaseTest {
 
             // Make sure we got the reads we expected in the right order
             for (int readIndex = 0; readIndex < reads.size(); ++readIndex) {
-                Assert.assertEquals(reads.get(readIndex).getReadName(), expectedReadNames.get(readIndex), "Read #" + (readIndex + 1) + " in complete traversal of " + samFile.getAbsolutePath() + " not equal to expected read");
+                Assert.assertEquals(reads.get(readIndex).getName(), expectedReadNames.get(readIndex), "Read #" + (readIndex + 1) + " in complete traversal of " + samFile.getAbsolutePath() + " not equal to expected read");
             }
         }
     }
@@ -121,8 +121,8 @@ public final class ReadsDataSourceUnitTest extends BaseTest {
         try (ReadsDataSource readsSource = new ReadsDataSource(samFile)) {
             readsSource.setIntervalsForTraversal(intervals);
 
-            List<SAMRecord> reads = new ArrayList<>();
-            for (SAMRecord read : readsSource) {
+            List<MutableGATKRead> reads = new ArrayList<>();
+            for (MutableGATKRead read : readsSource) {
                 reads.add(read);
             }
 
@@ -131,7 +131,7 @@ public final class ReadsDataSourceUnitTest extends BaseTest {
 
             // Make sure we got the reads we expected in the right order
             for (int readIndex = 0; readIndex < reads.size(); ++readIndex) {
-                Assert.assertEquals(reads.get(readIndex).getReadName(), expectedReadNames.get(readIndex), "Read #" + (readIndex + 1) + " in traversal by intervals of " + samFile.getAbsolutePath() + " not equal to expected read");
+                Assert.assertEquals(reads.get(readIndex).getName(), expectedReadNames.get(readIndex), "Read #" + (readIndex + 1) + " in traversal by intervals of " + samFile.getAbsolutePath() + " not equal to expected read");
             }
         }
     }
@@ -171,8 +171,8 @@ public final class ReadsDataSourceUnitTest extends BaseTest {
     public void testSingleFileQueryByInterval( final File samFile, final SimpleInterval interval, final List<String> expectedReadNames ) {
         try (ReadsDataSource readsSource = new ReadsDataSource(samFile)) {
 
-            List<SAMRecord> reads = new ArrayList<>();
-            Iterator<SAMRecord> queryIterator = readsSource.query(interval);
+            List<MutableGATKRead> reads = new ArrayList<>();
+            Iterator<MutableGATKRead> queryIterator = readsSource.query(interval);
             while (queryIterator.hasNext()) {
                 reads.add(queryIterator.next());
             }
@@ -182,7 +182,7 @@ public final class ReadsDataSourceUnitTest extends BaseTest {
 
             // Make sure we got the reads we expected in the right order
             for (int readIndex = 0; readIndex < reads.size(); ++readIndex) {
-                Assert.assertEquals(reads.get(readIndex).getReadName(), expectedReadNames.get(readIndex), "Read #" + (readIndex + 1) + " in query by interval of " + samFile.getAbsolutePath() + " not equal to expected read");
+                Assert.assertEquals(reads.get(readIndex).getName(), expectedReadNames.get(readIndex), "Read #" + (readIndex + 1) + " in query by interval of " + samFile.getAbsolutePath() + " not equal to expected read");
             }
         }
     }
@@ -201,9 +201,9 @@ public final class ReadsDataSourceUnitTest extends BaseTest {
     @Test(dataProvider = "MultipleFilesCompleteTraversalData")
     public void testMultipleFilesCompleteTraversal(final List<File> samFiles, final List<String> expectedReadNames) {
         try (ReadsDataSource readsSource = new ReadsDataSource(samFiles)) {
-            List<SAMRecord> reads = new ArrayList<>();
+            List<MutableGATKRead> reads = new ArrayList<>();
 
-            for (SAMRecord read : readsSource) {
+            for (MutableGATKRead read : readsSource) {
                 reads.add(read);
             }
 
@@ -212,7 +212,7 @@ public final class ReadsDataSourceUnitTest extends BaseTest {
 
             // Make sure we got the reads we expected in the right order
             for (int readIndex = 0; readIndex < reads.size(); ++readIndex) {
-                Assert.assertEquals(reads.get(readIndex).getReadName(), expectedReadNames.get(readIndex), "Read #" + (readIndex + 1) + " in complete traversal of " + samFiles + " not equal to expected read");
+                Assert.assertEquals(reads.get(readIndex).getName(), expectedReadNames.get(readIndex), "Read #" + (readIndex + 1) + " in complete traversal of " + samFiles + " not equal to expected read");
             }
         }
     }
@@ -253,8 +253,8 @@ public final class ReadsDataSourceUnitTest extends BaseTest {
         try (ReadsDataSource readsSource = new ReadsDataSource(samFiles)) {
             readsSource.setIntervalsForTraversal(intervals);
 
-            List<SAMRecord> reads = new ArrayList<>();
-            for (SAMRecord read : readsSource) {
+            List<MutableGATKRead> reads = new ArrayList<>();
+            for (MutableGATKRead read : readsSource) {
                 reads.add(read);
             }
 
@@ -263,7 +263,7 @@ public final class ReadsDataSourceUnitTest extends BaseTest {
 
             // Make sure we got the reads we expected in the right order
             for (int readIndex = 0; readIndex < reads.size(); ++readIndex) {
-                Assert.assertEquals(reads.get(readIndex).getReadName(), expectedReadNames.get(readIndex), "Read #" + (readIndex + 1) + " in traversal by intervals of " + samFiles + " not equal to expected read");
+                Assert.assertEquals(reads.get(readIndex).getName(), expectedReadNames.get(readIndex), "Read #" + (readIndex + 1) + " in traversal by intervals of " + samFiles + " not equal to expected read");
             }
         }
     }
@@ -299,8 +299,8 @@ public final class ReadsDataSourceUnitTest extends BaseTest {
     public void testMultipleFilesQueryByInterval( final List<File> samFiles, final SimpleInterval interval, final List<String> expectedReadNames ) {
         try (ReadsDataSource readsSource = new ReadsDataSource(samFiles)) {
 
-            List<SAMRecord> reads = new ArrayList<>();
-            Iterator<SAMRecord> queryIterator = readsSource.query(interval);
+            List<MutableGATKRead> reads = new ArrayList<>();
+            Iterator<MutableGATKRead> queryIterator = readsSource.query(interval);
             while (queryIterator.hasNext()) {
                 reads.add(queryIterator.next());
             }
@@ -310,7 +310,7 @@ public final class ReadsDataSourceUnitTest extends BaseTest {
 
             // Make sure we got the reads we expected in the right order
             for (int readIndex = 0; readIndex < reads.size(); ++readIndex) {
-                Assert.assertEquals(reads.get(readIndex).getReadName(), expectedReadNames.get(readIndex), "Read #" + (readIndex + 1) + " in query by interval of " + samFiles + " not equal to expected read");
+                Assert.assertEquals(reads.get(readIndex).getName(), expectedReadNames.get(readIndex), "Read #" + (readIndex + 1) + " in query by interval of " + samFiles + " not equal to expected read");
             }
         }
     }

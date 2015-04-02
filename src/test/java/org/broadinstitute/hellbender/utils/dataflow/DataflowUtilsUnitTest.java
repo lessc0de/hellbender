@@ -1,5 +1,6 @@
 package org.broadinstitute.hellbender.utils.dataflow;
 
+import com.google.appengine.repackaged.com.google.common.collect.Lists;
 import com.cloudera.dataflow.spark.EvaluationResult;
 import com.cloudera.dataflow.spark.SparkPipelineRunner;
 import com.google.api.services.genomics.model.Read;
@@ -17,6 +18,7 @@ import org.apache.hadoop.fs.Path;
 import org.broadinstitute.hellbender.engine.ReadsDataSource;
 import org.broadinstitute.hellbender.engine.dataflow.GATKTestPipeline;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
+import org.broadinstitute.hellbender.utils.read.MutableGATKRead;
 import org.broadinstitute.hellbender.utils.test.BaseTest;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -52,13 +54,14 @@ public final class DataflowUtilsUnitTest extends BaseTest {
     @Test
     public void testReadFromFileFn(){
         List<SimpleInterval> intervals = Lists.newArrayList(new SimpleInterval("chr7:1-202"), new SimpleInterval("chr8:2-202"));
-        DoFn<File, Read> readfn = new DataflowUtils.LoadReadsFromFileFn(intervals, ValidationStringency.SILENT);
+        //DoFn<File, Read> readfn = new DataflowUtils.LoadReadsFromFileFn(intervals, ValidationStringency.SILENT);
+        DoFn<File, MutableGATKRead> readfn = new DataflowUtils.LoadReadsFromFileFn(intervals, ValidationStringency.SILENT);
 
         File inputFile = new File(getToolTestDataDir(), "example_reads.bam");
-        List<Read> expected = getReadsFromFile(intervals, inputFile);
+        List<MutableGATKRead> expected = getReadsFromFile(intervals, inputFile);
 
-        DoFnTester<File, Read> tester = DoFnTester.of(readfn);
-        List<Read> output = tester.processBatch(inputFile);
+        DoFnTester<File, MutableGATKRead> tester = DoFnTester.of(readfn);
+        List<MutableGATKRead> output = tester.processBatch(inputFile);
 
         Assert.assertEquals(output, expected);
     }
@@ -78,12 +81,11 @@ public final class DataflowUtilsUnitTest extends BaseTest {
         Assert.assertEquals(expected, result.get(reads));
     }
 
-    public List<Read> getReadsFromFile(List<SimpleInterval> intervals, File inputFile) {
+    public List<MutableGATKRead> getReadsFromFile(List<SimpleInterval> intervals, File inputFile) {
         try(ReadsDataSource source = new ReadsDataSource(inputFile)) {
             source.setIntervalsForTraversal(intervals);
 
             return StreamSupport.stream(source.spliterator(), false)
-                    .map(ReadConverter::makeRead)
                     .collect(Collectors.toList());
         }
     }

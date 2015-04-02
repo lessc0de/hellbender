@@ -1,7 +1,8 @@
 package org.broadinstitute.hellbender.tools.recalibration;
 
-import htsjdk.samtools.SAMRecord;
+import htsjdk.samtools.SAMFileHeader;
 import org.broadinstitute.hellbender.tools.recalibration.covariates.*;
+import org.broadinstitute.hellbender.utils.read.MutableGATKRead;
 import org.broadinstitute.hellbender.utils.test.BaseTest;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -73,7 +74,7 @@ public final class StandardCovariateListUnitTest extends BaseTest {
         Assert.assertEquals(scl.indexByClass(new Covariate() {
 
             @Override
-            public void recordValues(SAMRecord read, ReadCovariates values) {
+            public void recordValues(MutableGATKRead read, SAMFileHeader header, ReadCovariates values) {
 
             }
 
