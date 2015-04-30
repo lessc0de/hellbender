@@ -18,6 +18,7 @@ import org.apache.spark.SparkException;
 import org.broadinstitute.hellbender.dev.pipelines.bqsr.BaseRecalOutput;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.utils.IntervalUtils;
+import org.broadinstitute.hellbender.engine.dataflow.datasources.ReadsSource;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.dataflow.DataflowUtils;
 import org.broadinstitute.hellbender.utils.read.MutableGATKRead;

@@ -10,6 +10,8 @@ import com.google.cloud.dataflow.sdk.transforms.PTransform;
 import com.google.cloud.dataflow.sdk.transforms.ParDo;
 import com.google.cloud.dataflow.sdk.util.GcsUtil;
 import com.google.cloud.dataflow.sdk.util.gcsfs.GcsPath;
+import com.google.cloud.dataflow.sdk.transforms.join.KeyedPCollectionTuple;
+import com.google.cloud.dataflow.sdk.values.KV;
 import com.google.cloud.dataflow.sdk.values.KV;
 import com.google.cloud.dataflow.sdk.values.PCollection;
 import com.google.cloud.genomics.dataflow.readers.bam.ReadConverter;
@@ -22,6 +24,8 @@ import org.apache.hadoop.io.LongWritable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.google.cloud.genomics.dataflow.utils.DataflowWorkarounds;
+import com.google.cloud.dataflow.sdk.values.TupleTag;
+import org.apache.commons.lang3.tuple.Pair;
 import org.broadinstitute.hellbender.engine.ReadsDataSource;
 import org.broadinstitute.hellbender.engine.dataflow.coders.GATKReadCoder;
 import org.broadinstitute.hellbender.engine.dataflow.coders.UUIDCoder;
@@ -211,6 +215,16 @@ public final class DataflowUtils {
                 }
             }
         }
+    }
+
+    // TODO: refactor this please
+    public static <K, T, U> Pair<KeyedPCollectionTuple<K>, Pair<TupleTag<T>, TupleTag<U>>>
+        makeKeyedPCollectionTuple( final PCollection<KV<K, T>> first, final PCollection<KV<K, U>> second ) {
+
+        final TupleTag<T> firstTag = new TupleTag<>();
+        final TupleTag<U> secondTag = new TupleTag<>();
+        final KeyedPCollectionTuple<K> tuple = KeyedPCollectionTuple.of(firstTag, first).and(secondTag, second);
+        return Pair.of(tuple, Pair.of(firstTag, secondTag));
     }
 
 
