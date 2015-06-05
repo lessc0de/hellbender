@@ -10,9 +10,19 @@ import org.broadinstitute.hellbender.utils.HasGenomeLocation;
 import org.broadinstitute.hellbender.utils.read.AlignmentUtils;
 import org.broadinstitute.hellbender.utils.read.ReadUtils;
 
+import java.io.Serializable;
 import java.util.Arrays;
+import java.util.Comparator;
 
 public final class Haplotype extends Allele implements HasGenomeLocation {
+
+
+    /**
+     * Compares two haplotypes first by their lengths and then by lexicographic order of their bases.
+     */
+    public static final Comparator<Haplotype> SIZE_AND_BASE_ORDER =
+            Comparator.comparingInt((Haplotype hap) -> hap.getBases().length)
+                      .thenComparing(hap -> hap.getBaseString());
 
     private static final long serialVersionUID = 1l;
 
@@ -216,5 +226,11 @@ public final class Haplotype extends Allele implements HasGenomeLocation {
         this.score = score;
     }
 
-
+    /**
+     * Get the span of this haplotype (may be null)
+     * @return a potentially null genome loc
+     */
+    public GenomeLoc getGenomeLocation() {
+        return genomeLocation;
+    }
 }
