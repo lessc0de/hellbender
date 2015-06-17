@@ -59,7 +59,7 @@ public final class UtilsUnitTest extends BaseTest {
 
     @Test
     public void testDupString() {
-        Assert.assertEquals("ababab", Utils.dupString("ab", 3));
+        //removed test because method is being removed
         Assert.assertEquals("aaa", Utils.dupString('a', 3));
         Assert.assertEquals(new byte[]{(byte)'a',(byte)'a',(byte)'a'}, Utils.dupBytes((byte)'a', 3));
     }

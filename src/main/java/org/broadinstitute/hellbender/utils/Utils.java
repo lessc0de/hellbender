@@ -273,10 +273,10 @@ public final class Utils {
      *
      * @Deprecated use {@link Strings#repeat} directly. Left here temporarily for the ease of porting GATK3 code.
      */
-    @Deprecated
+    /* this method is useless so I have removed it
     public static String dupString(final String s, final int nCopies) {
         return Strings.repeat(s, nCopies);
-    }
+    }*/
 
     public static String dupString(final char c, final int nCopies) {
         final char[] chars = new char[nCopies];
