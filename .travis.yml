@@ -24,7 +24,7 @@ env:
   #google API key
   - secure: GyC3Th11Gryeokc2UucWTS/Rc6AB+4ZRcSzpmLliTEtrCvDt+sXPxTH9z7GKiwqz0Ep91TTot/G8fDdSIUa+50itV1WKGDtkoRAvkG6Mt7bWm+5Cy6ZbPhktX+dWR5ks/9R8EBlJ5oiC6WkMcqlwZ90DftcHYOOF5+4ToCp7HzM=
   #hellbender specific variables
-  - HELLBENDER_TEST_INPUTS=gs://hellbender/test/resources/org/broadinstitute/hellbender/tools/BQSR/
+  - HELLBENDER_TEST_INPUTS=gs://hellbender/test/
   - HELLBENDER_TEST_STAGING=gs://hellbender/test/staging/
   - HELLBENDER_TEST_PROJECT=broad-dsde-dev
 cache:
