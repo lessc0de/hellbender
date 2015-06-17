@@ -12,23 +12,34 @@ env:
   - CLOUD=true
   - CLOUD=false
   global:
+  #gradle needs this
   - TERM=dumb
+  #google cloud stuff
   - CLOUDSDK_CORE_DISABLE_PROMPTS=1
+  - GCLOUD=$HOME/gcloud/google-cloud-sdk/bin 
+  - CLOUDSDK_PYTHON_SITEPACKAGES=1 
+  - GOOGLE_APPLICATION_CREDENTIALS=$TRAVIS_BUILD_DIR/servicekey.json
+  #coveralls repo token
   - secure: RA4LKD82cW+0xPayPVAWSpYqJu5uoPcz7oXXYtYNVuilFmS8PGYx0g/BXs4QMvQsGMt6aMLN8m7lMAPN5XTH/8JSeM3VmQ3mdpgNdP+p3CVlwrapZ2lTq27Wb/E8J1CGEHOg76z716t//FUElyC/gdhS+tfBmXk3YanM5fMXEHs=
+  #google API key
   - secure: GyC3Th11Gryeokc2UucWTS/Rc6AB+4ZRcSzpmLliTEtrCvDt+sXPxTH9z7GKiwqz0Ep91TTot/G8fDdSIUa+50itV1WKGDtkoRAvkG6Mt7bWm+5Cy6ZbPhktX+dWR5ks/9R8EBlJ5oiC6WkMcqlwZ90DftcHYOOF5+4ToCp7HzM=
+  #hellbender specific variables
   - HELLBENDER_TEST_INPUTS=gs://hellbender/test/resources/org/broadinstitute/hellbender/tools/BQSR/
   - HELLBENDER_TEST_STAGING=gs://hellbender/test/staging/
   - HELLBENDER_TEST_PROJECT=broad-dsde-dev
 cache:
   directories:
   - ~/.gradle
+  - $HOME/gcloud/
+
 before_install:
 #setup google stuff
 - openssl aes-256-cbc -K $encrypted_29f3b7c4d8c3_key -iv $encrypted_29f3b7c4d8c3_iv
   -in servicekey.json.enc -out servicekey.json -d
-- curl https://sdk.cloud.google.com | bash
-- exec -l $SHELL
-- gcloud auth activate-service-account 806222273987-uilktks3j6i7962rp0v7nusveer58497@developer.gserviceaccount.com --key-file servicekey.json
+- ./install_gcloud.sh
+- printf 'y\n' | $GCLOUD/gcloud components update app
+- $GCLOUD/gcloud config set project hello-webapp2-app-enigine
+- $GCLOUD/gcloud auth activate-service-account --key servicekey.json
 - R --version
 after_success:
 - gradle jacocoTestReport coveralls
