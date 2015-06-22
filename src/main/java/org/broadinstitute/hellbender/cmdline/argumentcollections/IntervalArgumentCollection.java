@@ -1,8 +1,8 @@
 package org.broadinstitute.hellbender.cmdline.argumentcollections;
 
 import htsjdk.samtools.SAMSequenceDictionary;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 import org.broadinstitute.hellbender.cmdline.Argument;
 import org.broadinstitute.hellbender.cmdline.ArgumentCollectionDefinition;
 import org.broadinstitute.hellbender.exceptions.GATKException;
