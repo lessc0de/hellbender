@@ -1,6 +1,5 @@
 package org.broadinstitute.hellbender.tools.dataflow.transforms;
 
-import com.google.appengine.repackaged.com.google.common.collect.Lists;
 import com.google.api.services.genomics.model.Read;
 import com.google.cloud.dataflow.sdk.Pipeline;
 import com.google.cloud.dataflow.sdk.testing.DataflowAssert;
@@ -16,7 +15,6 @@ import org.broadinstitute.hellbender.utils.dataflow.DataflowUtils;
 import org.broadinstitute.hellbender.utils.read.ArtificialReadUtils;
 import org.broadinstitute.hellbender.utils.read.MutableGATKRead;
 import org.broadinstitute.hellbender.engine.dataflow.PTransformSAM;
-import org.broadinstitute.hellbender.utils.read.ArtificialSAMUtils;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
