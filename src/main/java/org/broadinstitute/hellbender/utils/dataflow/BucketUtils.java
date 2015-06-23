@@ -1,19 +1,18 @@
 package org.broadinstitute.hellbender.utils.dataflow;
 
-import com.google.appengine.tools.cloudstorage.GcsFilename;
-import com.google.appengine.tools.cloudstorage.GcsInputChannel;
-import com.google.appengine.tools.cloudstorage.GcsOutputChannel;
-import com.google.appengine.tools.cloudstorage.GcsService;
-import com.google.appengine.tools.cloudstorage.GcsServiceFactory;
-import com.google.appengine.tools.cloudstorage.RetryParams;
+import com.google.api.services.storage.Storage;
+import com.google.cloud.dataflow.sdk.options.GcsOptions;
 import com.google.cloud.dataflow.sdk.options.PipelineOptions;
 import com.google.cloud.dataflow.sdk.util.GcsUtil;
+import com.google.cloud.dataflow.sdk.util.Transport;
 import com.google.cloud.dataflow.sdk.util.gcsfs.GcsPath;
-import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.exceptions.UserException;
 
 import java.io.*;
 import java.nio.channels.Channels;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.GeneralSecurityException;
 
 /**
  * Utilities for dealing with google buckets
@@ -45,8 +44,12 @@ public final class BucketUtils {
      */
     public static InputStream openFile(String path, PipelineOptions popts) {
         try {
+            if (null==path) throw new NullPointerException("path was null, shouldn't be.");
+            if (null==popts) throw new NullPointerException("popts was null, shouldn't be.");
             if (BucketUtils.isCloudStorageUrl(path)) {
-                return Channels.newInputStream(new GcsUtil.GcsUtilFactory().create(popts).open(GcsPath.fromUri(path)));
+                GcsPath gcsPath = GcsPath.fromUri(path);
+                if (null==gcsPath) throw new NullPointerException("parsing path yielded null, shouldn't have.");
+                return Channels.newInputStream(new GcsUtil.GcsUtilFactory().create(popts).open(gcsPath));
             } else {
                 return new FileInputStream(path);
             }
@@ -73,5 +76,42 @@ public final class BucketUtils {
         } catch (Exception x) {
             throw new UserException.CouldNotCreateOutputFile(path, x);
         }
+    }
+
+    /**
+     * Copies a file. Can be used to copy e.g. from GCS to local.
+     *
+     * @param sourcePath the path to read from. If GCS, it must start with "gs://".
+     * @param popts the pipeline's options, with authentication information.
+     * @param destPath the path to copy to. If GCS, it must start with "gs://".
+     * @throws IOException
+     */
+    public static void copyFile(String sourcePath, PipelineOptions popts, String destPath) throws IOException {
+        try (
+            InputStream in = openFile(sourcePath, popts);
+            OutputStream fout = createFile(destPath, popts)) {
+            final byte[] buf = new byte[1024 * 1024];
+            int count;
+            while ((count = in.read(buf)) > 0) {
+                fout.write(buf, 0, count);
+            }
+        }
+    }
+
+    /**
+     * Deletes a file, local or on GCS.
+     *
+     * @param pathToDelete the path to delete. If GCS, it must start with "gs://".
+     * @param popts the pipeline's options, with authentication information.
+     */
+    public static void deleteFile(String pathToDelete, PipelineOptions popts) throws IOException, GeneralSecurityException {
+        if (!BucketUtils.isCloudStorageUrl(pathToDelete)) {
+            boolean ok = new File(pathToDelete).delete();
+            if (!ok) throw new IOException("Unable to delete '"+pathToDelete+"'");
+        }
+        GcsPath path = GcsPath.fromUri(pathToDelete);
+        GcsOptions gcsOptions = (GcsOptions)popts.as(GcsOptions.class);
+        Storage storage = Transport.newStorageClient(gcsOptions).build();
+        storage.objects().delete(path.getBucket(), path.getObject()).execute();
     }
 }

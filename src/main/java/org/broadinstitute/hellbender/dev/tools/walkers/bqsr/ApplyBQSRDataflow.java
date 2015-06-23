@@ -4,6 +4,7 @@ import com.google.api.services.genomics.model.Read;
 import com.google.cloud.dataflow.sdk.Pipeline;
 import com.google.cloud.dataflow.sdk.io.TextIO;
 import com.google.cloud.dataflow.sdk.transforms.Create;
+import com.google.cloud.dataflow.sdk.transforms.ParDo;
 import com.google.cloud.dataflow.sdk.util.GcsUtil;
 import com.google.cloud.dataflow.sdk.util.gcsfs.GcsPath;
 import com.google.cloud.dataflow.sdk.values.PCollection;
@@ -20,6 +21,8 @@ import htsjdk.samtools.SamReader;
 import htsjdk.samtools.SamReaderFactory;
 import htsjdk.samtools.ValidationStringency;
 import htsjdk.samtools.util.CloserUtil;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.broadinstitute.hellbender.cmdline.Argument;
 import org.broadinstitute.hellbender.cmdline.ArgumentCollection;
 import org.broadinstitute.hellbender.cmdline.CommandLineProgramProperties;
@@ -30,6 +33,7 @@ import org.broadinstitute.hellbender.cmdline.argumentcollections.RequiredReadInp
 import org.broadinstitute.hellbender.cmdline.programgroups.ReadProgramGroup;
 import org.broadinstitute.hellbender.dev.pipelines.bqsr.ApplyBQSRTransform;
 import org.broadinstitute.hellbender.dev.pipelines.bqsr.BaseRecalOutput;
+import org.broadinstitute.hellbender.dev.pipelines.bqsr.BaseRecalOutputSource;
 import org.broadinstitute.hellbender.dev.pipelines.bqsr.SmallBamWriter;
 import org.broadinstitute.hellbender.engine.FeatureContext;
 import org.broadinstitute.hellbender.engine.ReadWalker;
@@ -52,6 +56,7 @@ import java.io.InputStream;
 import java.nio.channels.Channels;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 @CommandLineProgramProperties(
         usage = "Applies the BQSR table to the input BAM.",
@@ -59,6 +64,8 @@ import java.util.List;
         programGroup = ReadProgramGroup.class
 )
 public final class ApplyBQSRDataflow extends DataflowCommandLineProgram {
+
+    private final static Logger logger = LogManager.getLogger(ApplyBQSRDataflow.class);
 
     @ArgumentCollection
     public final RequiredReadInputArgumentCollection readArguments = new RequiredReadInputArgumentCollection();
@@ -78,7 +85,7 @@ public final class ApplyBQSRDataflow extends DataflowCommandLineProgram {
      * Please be aware that you should only run recalibration with the covariates file created on the same input bam(s).
      */
     @Argument(fullName="bqsr_recal_file", shortName="bqsr", doc="Input covariates table file for base quality score recalibration")
-    public File BQSR_RECAL_FILE;
+    public String BQSR_RECAL_FILE_NAME;
 
     /**
      * command-line options to fine tune the recalibration.
@@ -86,6 +93,10 @@ public final class ApplyBQSRDataflow extends DataflowCommandLineProgram {
     @ArgumentCollection
     public ApplyBQSRArgumentCollection bqsrOpts = new ApplyBQSRArgumentCollection();
 
+    private String intermediateGCSBam;
+    private boolean copyIntermediate = false;
+
+    @Override
     protected void setupPipeline(Pipeline pipeline) {
         if (readArguments.getReadFilesNames().size()>1) {
             throw new UserException("Sorry, we only support a single input file for now.");
@@ -96,10 +107,43 @@ public final class ApplyBQSRDataflow extends DataflowCommandLineProgram {
         final SAMSequenceDictionary sequenceDictionary = header.getSequenceDictionary();
         final List<SimpleInterval> intervals = intervalArgumentCollection.intervalsSpecified() ? intervalArgumentCollection.getIntervals(sequenceDictionary) :
                 IntervalUtils.getAllIntervalsForReference(sequenceDictionary);
-        final BaseRecalOutput recalInfo = new BaseRecalOutput(BQSR_RECAL_FILE);
-        PCollection<BaseRecalOutput> recalInfoSingletonCollection = pipeline.apply(Create.of(recalInfo).withName("recal_file ingest"));
+        PCollection<BaseRecalOutput> recalInfoSingletonCollection;
+        if (BucketUtils.isCloudStorageUrl(BQSR_RECAL_FILE_NAME)) {
+            recalInfoSingletonCollection = BaseRecalOutputSource.of(pipeline, BQSR_RECAL_FILE_NAME);
+        } else{
+            final BaseRecalOutput recalInfo = new BaseRecalOutput(new File(BQSR_RECAL_FILE_NAME));
+            recalInfoSingletonCollection = pipeline.apply(Create.of(recalInfo).withName("recal_file ingest"));
+        }
         PCollection<Read> output = readsSource.getReadPCollection(intervals, ValidationStringency.SILENT)
                 .apply(new ApplyBQSRTransform(header, recalInfoSingletonCollection, bqsrOpts));
-        SmallBamWriter.writeToFile(pipeline, output, header, OUTPUT);
+        intermediateGCSBam = OUTPUT;
+        if (isRemote() && !BucketUtils.isCloudStorageUrl(intermediateGCSBam)) {
+            // The user specified remote execution and provided a local file name. So we're going to have to save to GCS as a go-between.
+            // Note that this may require more permissions
+            copyIntermediate = true;
+            intermediateGCSBam = GcsPath.fromUri(stagingLocation).resolve("temp-applyBqsr-output-" + new Random().nextLong() + ".bam").toString();
+            logger.info("Staging results at " + intermediateGCSBam);
+        }
+        SmallBamWriter.writeToFile(pipeline, output, header, intermediateGCSBam);
     }
+
+    @Override
+    protected void afterPipeline(Pipeline pipeline) {
+        if (!copyIntermediate) return;
+        try {
+            logger.info("Copying results from " + intermediateGCSBam + " to " + OUTPUT + ".");
+            BucketUtils.copyFile(intermediateGCSBam, pipeline.getOptions(), OUTPUT);
+        } catch (IOException x) {
+            // keep the intermediate file if anything goes wrong, so we can investigate
+            throw new UserException.CouldNotCreateOutputFile("Error writing to '" + OUTPUT + "'.",x);
+        }
+        try {
+            BucketUtils.deleteFile(intermediateGCSBam, pipeline.getOptions());
+        } catch (Exception x) {
+            // log error but continue since this error isn't fatal.
+            logger.warn("Unable to delete temporary file '" + intermediateGCSBam + "'.", x);
+        }
+
+    }
+
 }

@@ -13,6 +13,9 @@ import java.util.Arrays;
 import java.util.List;
 
 public final class ApplyBQSRDataflowIntegrationTest extends CommandLineProgramTest {
+
+    private final static String THIS_TEST_FOLDER = "org/broadinstitute/hellbender/tools/BQSR/";
+
     private static class ABQSRTest {
         final String bam;
         final String args;
@@ -32,6 +35,7 @@ public final class ApplyBQSRDataflowIntegrationTest extends CommandLineProgramTe
 
     final String resourceDir = getTestDataDir() + "/" + "BQSR" + "/";
     final String hiSeqBam = resourceDir + "HiSeq.1mb.1RG.2k_lines.alternate_allaligned.bam";
+    final String naBam = resourceDir + "NA12878.chr17_69k_70k.dictFix.bam";
 
     @DataProvider(name = "ApplyBQSRTest")
     public Object[][] createABQSRTestData() {
@@ -47,11 +51,57 @@ public final class ApplyBQSRDataflowIntegrationTest extends CommandLineProgramTe
         return tests.toArray(new Object[][]{});
     }
 
+    @DataProvider(name = "ApplyBQSRTestGCS")
+    public Object[][] createABQSRTestDataGCS() {
+        final String resourceDirGCS = getDataflowTestInputPath() + THIS_TEST_FOLDER;
+        final String hiSeqBamGCS = resourceDirGCS + "HiSeq.1mb.1RG.2k_lines.alternate_allaligned.bam";
+
+        List<Object[]> tests = new ArrayList<>();
+
+        tests.add(new Object[]{new ABQSRTest(hiSeqBamGCS, "", resourceDir + "expected.HiSeq.1mb.1RG.2k_lines.bqsr.alternate_allaligned.bam")});
+
+        // TODO: add test inputs with some unaligned reads
+
+        return tests.toArray(new Object[][]{});
+    }
+
     @Test(dataProvider = "ApplyBQSRTest")
     public void testPR(ABQSRTest params) throws IOException {
         String args =
                 " -I " + params.bam +
                 " --bqsr_recal_file " + resourceDir + "HiSeq.20mb.1RG.table.gz " +
+                params.args +
+                " -O %s";
+        ArgumentsBuilder ab = new ArgumentsBuilder().add(args);
+        addDataflowRunnerArgs(ab);
+        IntegrationTestSpec spec = new IntegrationTestSpec(
+                ab.getString(),
+                Arrays.asList(params.expectedFile));
+        spec.executeTest("testPrintReads-" + params.args, this);
+    }
+
+    @Test(dataProvider = "ApplyBQSRTestGCS", groups = {"bucket"})
+    public void testPR_GCS(ABQSRTest params) throws IOException {
+        String args =
+                " -I " + params.bam +
+                " --bqsr_recal_file " + resourceDir + "HiSeq.20mb.1RG.table.gz " +
+                params.args +
+                " -O %s";
+        ArgumentsBuilder ab = new ArgumentsBuilder().add(args);
+        addDataflowRunnerArgs(ab);
+        IntegrationTestSpec spec = new IntegrationTestSpec(
+                ab.getString(),
+                Arrays.asList(params.expectedFile));
+        spec.executeTest("testPrintReads-" + params.args, this);
+    }
+
+    @Test(dataProvider = "ApplyBQSRTestGCS", groups = {"cloud"})
+    public void testPR_Cloud(ABQSRTest params) throws IOException {
+        String args =
+                " -I " + params.bam +
+                " --runner BLOCKING " +
+                " --apiKey " + getDataflowTestApiKey() + " --project " + getDataflowTestProject() + " --staging " + getDataflowTestStaging() +
+                " --bqsr_recal_file " + getDataflowTestInputPath() + THIS_TEST_FOLDER + "HiSeq.20mb.1RG.table.gz " +
                 params.args +
                 " -O %s";
         ArgumentsBuilder ab = new ArgumentsBuilder().add(args);
