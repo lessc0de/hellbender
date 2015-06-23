@@ -4,6 +4,7 @@ import htsjdk.tribble.Feature;
 import htsjdk.variant.variantcontext.*;
 import htsjdk.variant.variantcontext.writer.VariantContextWriter;
 import htsjdk.variant.vcf.*;
+import org.broadinstitute.hellbender.utils.Utils;
 
 import java.util.*;
 
@@ -352,7 +353,7 @@ public class VariantFiltration extends RodWalker<Integer, Integer> {
             // for each genotype, check filters then create a new object
             for ( final Genotype g : vc.getGenotypes() ) {
                 if ( g.isCalled() ) {
-                    final List<String> filters = new ArrayList<String>();
+                    final List<String> filters = new ArrayList<>();
                     if ( g.isFiltered() ) filters.add(g.getFilters());
 
                     // Add if expression filters the variant context
@@ -375,7 +376,7 @@ public class VariantFiltration extends RodWalker<Integer, Integer> {
         }
 
         // make a new variant context based on filters
-        Set<String> filters = new LinkedHashSet<String>(vc.getFilters());
+        Set<String> filters = new LinkedHashSet<>(vc.getFilters());
 
         // test for clustered SNPs if requested
         if ( clusteredSNPs != null && clusteredSNPs.filter(variantContextWindow) )
@@ -398,10 +399,6 @@ public class VariantFiltration extends RodWalker<Integer, Integer> {
             builder.filters(filters);
 
         writer.add(builder.make());
-    }
-
-    public Integer reduce(Integer value, Integer sum) {
-        return sum + value;
     }
 
     /**
