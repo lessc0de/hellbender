@@ -1,5 +1,6 @@
 package org.broadinstitute.hellbender.utils.dataflow;
 
+import com.google.api.client.util.ByteStreams;
 import com.google.api.services.storage.Storage;
 import com.google.cloud.dataflow.sdk.options.GcsOptions;
 import com.google.cloud.dataflow.sdk.options.PipelineOptions;
@@ -7,12 +8,15 @@ import com.google.cloud.dataflow.sdk.util.GcsUtil;
 import com.google.cloud.dataflow.sdk.util.Transport;
 import com.google.cloud.dataflow.sdk.util.gcsfs.GcsPath;
 import org.broadinstitute.hellbender.exceptions.UserException;
+import org.broadinstitute.hellbender.utils.Utils;
 
 import java.io.*;
 import java.nio.channels.Channels;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
+import java.util.Random;
+import java.util.UUID;
 
 /**
  * Utilities for dealing with google buckets
@@ -44,16 +48,14 @@ public final class BucketUtils {
      */
     public static InputStream openFile(String path, PipelineOptions popts) {
         try {
-            if (null==path) throw new NullPointerException("path was null, shouldn't be.");
-            if (null==popts) throw new NullPointerException("popts was null, shouldn't be.");
+            Utils.nonNull(path);
+            Utils.nonNull(popts);
             if (BucketUtils.isCloudStorageUrl(path)) {
-                GcsPath gcsPath = GcsPath.fromUri(path);
-                if (null==gcsPath) throw new NullPointerException("parsing path yielded null, shouldn't have.");
-                return Channels.newInputStream(new GcsUtil.GcsUtilFactory().create(popts).open(gcsPath));
+                return Channels.newInputStream(new GcsUtil.GcsUtilFactory().create(popts).open(GcsPath.fromUri(path)));
             } else {
                 return new FileInputStream(path);
             }
-        } catch (Exception x) {
+        } catch (IOException x) {
             throw new UserException.CouldNotReadInputFile(path, x);
         }
     }
@@ -73,7 +75,7 @@ public final class BucketUtils {
             } else {
                 return new FileOutputStream(path);
             }
-        } catch (Exception x) {
+        } catch (IOException x) {
             throw new UserException.CouldNotCreateOutputFile(path, x);
         }
     }
@@ -90,11 +92,7 @@ public final class BucketUtils {
         try (
             InputStream in = openFile(sourcePath, popts);
             OutputStream fout = createFile(destPath, popts)) {
-            final byte[] buf = new byte[1024 * 1024];
-            int count;
-            while ((count = in.read(buf)) > 0) {
-                fout.write(buf, 0, count);
-            }
+            ByteStreams.copy(in, fout);
         }
     }
 
@@ -105,13 +103,25 @@ public final class BucketUtils {
      * @param popts the pipeline's options, with authentication information.
      */
     public static void deleteFile(String pathToDelete, PipelineOptions popts) throws IOException, GeneralSecurityException {
-        if (!BucketUtils.isCloudStorageUrl(pathToDelete)) {
+        if (BucketUtils.isCloudStorageUrl(pathToDelete)) {
+            GcsPath path = GcsPath.fromUri(pathToDelete);
+            GcsOptions gcsOptions = (GcsOptions)popts.as(GcsOptions.class);
+            Storage storage = Transport.newStorageClient(gcsOptions).build();
+            storage.objects().delete(path.getBucket(), path.getObject()).execute();
+        } else {
             boolean ok = new File(pathToDelete).delete();
             if (!ok) throw new IOException("Unable to delete '"+pathToDelete+"'");
         }
-        GcsPath path = GcsPath.fromUri(pathToDelete);
-        GcsOptions gcsOptions = (GcsOptions)popts.as(GcsOptions.class);
-        Storage storage = Transport.newStorageClient(gcsOptions).build();
-        storage.objects().delete(path.getBucket(), path.getObject()).execute();
+    }
+
+    /**
+     * Picks a random name, by putting some random letters between "prefix" and "suffix".
+     *
+     * @param stagingLocation The folder where you want the file to be. Must start with "gs://"
+     * @param prefix The beginning of the file name
+     * @param suffix The end of the file name, e.g. ".tmp"
+     */
+    public static String randomGcsPath(String stagingLocation, String prefix, String suffix) {
+        return GcsPath.fromUri(stagingLocation).resolve(prefix + UUID.randomUUID().toString() + suffix).toString();
     }
 }

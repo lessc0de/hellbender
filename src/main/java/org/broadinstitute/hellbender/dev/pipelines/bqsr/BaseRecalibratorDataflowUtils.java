@@ -107,7 +107,10 @@ public final class BaseRecalibratorDataflowUtils implements Serializable {
   // ---------------------------------------------------------------------------------------------------
   // non-public methods
 
-
+  /*
+  * addQuantizationInfo takes the computed RecalibrationTable and adds the QuantizationInfo and RequestedCovariates objects.
+  * We call this triplet "BaseRecalOutput". It contains everything we need from phase 1 to continue onto phase 2 of BQSR.
+  */
   private static PCollection<BaseRecalOutput> addQuantizationInfo(SAMFileHeader readsHeader, BaseRecalibrationArgumentCollection toolArgs, PCollection<RecalibrationTables> recal) {
     return recal.apply(ParDo
             .named("addQuantizationInfo")

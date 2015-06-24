@@ -94,7 +94,6 @@ public final class ApplyBQSRDataflow extends DataflowCommandLineProgram {
     public ApplyBQSRArgumentCollection bqsrOpts = new ApplyBQSRArgumentCollection();
 
     private String intermediateGCSBam;
-    private boolean copyIntermediate = false;
 
     @Override
     protected void setupPipeline(Pipeline pipeline) {
@@ -107,21 +106,14 @@ public final class ApplyBQSRDataflow extends DataflowCommandLineProgram {
         final SAMSequenceDictionary sequenceDictionary = header.getSequenceDictionary();
         final List<SimpleInterval> intervals = intervalArgumentCollection.intervalsSpecified() ? intervalArgumentCollection.getIntervals(sequenceDictionary) :
                 IntervalUtils.getAllIntervalsForReference(sequenceDictionary);
-        PCollection<BaseRecalOutput> recalInfoSingletonCollection;
-        if (BucketUtils.isCloudStorageUrl(BQSR_RECAL_FILE_NAME)) {
-            recalInfoSingletonCollection = BaseRecalOutputSource.of(pipeline, BQSR_RECAL_FILE_NAME);
-        } else{
-            final BaseRecalOutput recalInfo = new BaseRecalOutput(new File(BQSR_RECAL_FILE_NAME));
-            recalInfoSingletonCollection = pipeline.apply(Create.of(recalInfo).withName("recal_file ingest"));
-        }
+        PCollection<BaseRecalOutput> recalInfoSingletonCollection = BaseRecalOutputSource.loadFileOrGcs(pipeline, BQSR_RECAL_FILE_NAME);
         PCollection<Read> output = readsSource.getReadPCollection(intervals, ValidationStringency.SILENT)
                 .apply(new ApplyBQSRTransform(header, recalInfoSingletonCollection, bqsrOpts));
         intermediateGCSBam = OUTPUT;
-        if (isRemote() && !BucketUtils.isCloudStorageUrl(intermediateGCSBam)) {
+        if (needsIntermediateCopy()) {
             // The user specified remote execution and provided a local file name. So we're going to have to save to GCS as a go-between.
             // Note that this may require more permissions
-            copyIntermediate = true;
-            intermediateGCSBam = GcsPath.fromUri(stagingLocation).resolve("temp-applyBqsr-output-" + new Random().nextLong() + ".bam").toString();
+            intermediateGCSBam = BucketUtils.randomGcsPath(stagingLocation, "temp-applyBqsr-output-", ".bam");
             logger.info("Staging results at " + intermediateGCSBam);
         }
         SmallBamWriter.writeToFile(pipeline, output, header, intermediateGCSBam);
@@ -129,7 +121,7 @@ public final class ApplyBQSRDataflow extends DataflowCommandLineProgram {
 
     @Override
     protected void afterPipeline(Pipeline pipeline) {
-        if (!copyIntermediate) return;
+        if (!needsIntermediateCopy()) return;
         try {
             logger.info("Copying results from " + intermediateGCSBam + " to " + OUTPUT + ".");
             BucketUtils.copyFile(intermediateGCSBam, pipeline.getOptions(), OUTPUT);
@@ -144,6 +136,12 @@ public final class ApplyBQSRDataflow extends DataflowCommandLineProgram {
             logger.warn("Unable to delete temporary file '" + intermediateGCSBam + "'.", x);
         }
 
+    }
+
+    // Specified remote execution and a local output.
+    // The user probably didn't mean for the output to end up on the worker's local disk.
+    private boolean needsIntermediateCopy() {
+        return isRemote() && !BucketUtils.isCloudStorageUrl(OUTPUT);
     }
 
 }
