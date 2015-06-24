@@ -1,5 +1,6 @@
 package org.broadinstitute.hellbender.utils.variant;
 
+import htsjdk.samtools.util.Locatable;
 import htsjdk.tribble.TribbleException;
 import htsjdk.variant.variantcontext.*;
 import htsjdk.variant.vcf.VCFConstants;
@@ -9,6 +10,8 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.broadinstitute.hellbender.utils.GenomeLoc;
+import org.broadinstitute.hellbender.utils.GenomeLocParser;
+import org.broadinstitute.hellbender.utils.SimpleInterval;
 import org.broadinstitute.hellbender.utils.Utils;
 
 import java.io.Serializable;
@@ -111,6 +114,16 @@ public final class GATKVariantContextUtils {
         }
 
         return result;
+    }
+
+    /**
+     * create a genome location, given a variant context
+     * @param genomeLocParser parser
+     * @param vc the variant context
+     * @return the genomeLoc
+     */
+    public static Locatable getLocation(final VariantContext vc) {
+        return new SimpleInterval(vc.getContig(), vc.getStart(), vc.getEnd());
     }
 
     public enum GenotypeMergeType {

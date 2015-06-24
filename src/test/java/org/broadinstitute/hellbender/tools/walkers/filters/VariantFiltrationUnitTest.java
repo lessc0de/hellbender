@@ -1,9 +1,14 @@
 package org.broadinstitute.hellbender.tools.walkers.filters;
 
 import htsjdk.samtools.reference.IndexedFastaSequenceFile;
+import htsjdk.samtools.util.Locatable;
 import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.VariantContext;
 import htsjdk.variant.variantcontext.VariantContextBuilder;
+import org.broadinstitute.hellbender.utils.SimpleInterval;
+import org.broadinstitute.hellbender.utils.Utils;
+import org.broadinstitute.hellbender.utils.fasta.CachingIndexedFastaSequenceFile;
+import org.broadinstitute.hellbender.utils.test.BaseTest;
 import org.testng.Assert;
 import org.testng.annotations.BeforeTest;
 import org.testng.annotations.DataProvider;
@@ -14,19 +19,17 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-public class VariantFiltrationUnitTest extends BaseTest {
+public final class VariantFiltrationUnitTest extends BaseTest {
 
     private String chr1 = null;
-    private GenomeLoc genomeLoc = null;
+    private Locatable genomeLoc = null;
     private String vcFilter = "testFilter";
 
     @BeforeTest
     public void before() {
-        // Create GenomeLoc
-        IndexedFastaSequenceFile fasta = CachingIndexedFastaSequenceFile.checkAndCreate(new File(privateTestDir + "iupacFASTA.fasta"));
-        GenomeLocParser genomeLocParser = new GenomeLocParser(fasta);
+        final IndexedFastaSequenceFile fasta = CachingIndexedFastaSequenceFile.checkAndCreate(new File(publicTestDir + "iupacFASTA.fasta"));
         chr1 = fasta.getSequenceDictionary().getSequence(0).getSequenceName();
-        genomeLoc = genomeLocParser.createGenomeLoc(chr1, 5, 10);
+        genomeLoc = new SimpleInterval(chr1, 5, 10);
     }
 
     @DataProvider(name = "VariantMaskData")
@@ -34,7 +37,7 @@ public class VariantFiltrationUnitTest extends BaseTest {
 
         final String maskName = "testMask";
 
-        List<Object[]> tests = Arrays.asList(new Object[]{chr1, 0, 0, maskName, 10, true, true},
+        final List<Object[]> tests = Arrays.asList(new Object[]{chr1, 0, 0, maskName, 10, true, true},
                 new Object[]{"chr2", 0, 0, maskName, 10, true, false},
                 new Object[]{chr1, 0, 0, null, 10, true, true},
                 new Object[]{chr1, 0, 0, maskName, 10, true, true},
@@ -65,7 +68,7 @@ public class VariantFiltrationUnitTest extends BaseTest {
         final byte[] allele1 = Utils.dupBytes((byte) 'A', 1);
         final byte[] allele2 = Utils.dupBytes((byte) 'T', 2);
 
-        final List<Allele> alleles = new ArrayList<Allele>(2);
+        final List<Allele> alleles = new ArrayList<>(2);
         final Allele ref = Allele.create(allele1, true);
         final Allele alt = Allele.create(allele2, false);
         alleles.add(ref);
@@ -73,7 +76,7 @@ public class VariantFiltrationUnitTest extends BaseTest {
 
         final VariantContext vc = new VariantContextBuilder("test", contig, start, stop, alleles).filter(vcFilter).make();
 
-        boolean coversVariant = VariantFiltration.doesMaskCoverVariant(vc, genomeLoc, maskName, maskExtension, vcBeforeLoc);
+        final boolean coversVariant = VariantFiltration.doesMaskCoverVariant(vc, genomeLoc, maskName, maskExtension, vcBeforeLoc);
         Assert.assertEquals(coversVariant, expectedValue);
     }
 }

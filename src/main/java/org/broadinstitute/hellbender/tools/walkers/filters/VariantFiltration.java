@@ -1,10 +1,19 @@
 package org.broadinstitute.hellbender.tools.walkers.filters;
 
+import htsjdk.samtools.util.Locatable;
 import htsjdk.tribble.Feature;
 import htsjdk.variant.variantcontext.*;
 import htsjdk.variant.variantcontext.writer.VariantContextWriter;
 import htsjdk.variant.vcf.*;
+import org.broadinstitute.hellbender.cmdline.Argument;
+import org.broadinstitute.hellbender.cmdline.ArgumentCollection;
+import org.broadinstitute.hellbender.cmdline.argumentcollections.RequiredVariantInputArgumentCollection;
+import org.broadinstitute.hellbender.engine.*;
+import org.broadinstitute.hellbender.exceptions.GATKException;
+import org.broadinstitute.hellbender.exceptions.UserException;
+import org.broadinstitute.hellbender.utils.GenomeLoc;
 import org.broadinstitute.hellbender.utils.Utils;
+import org.broadinstitute.hellbender.utils.variant.GATKVariantContextUtils;
 
 import java.util.*;
 
@@ -41,12 +50,10 @@ import java.util.*;
  * </pre>
  *
  */
-@DocumentedGATKFeature( groupName = HelpConstants.DOCS_CAT_VARMANIP, extraDocs = {CommandLineGATK.class} )
-@Reference(window=@Window(start=-50,stop=50))
-public class VariantFiltration extends RodWalker<Integer, Integer> {
+public final class VariantFiltration extends VariantWalker {
 
     @ArgumentCollection
-    protected StandardVariantContextInputArgumentCollection variantCollection = new StandardVariantContextInputArgumentCollection();
+    public RequiredVariantInputArgumentCollection variantCollection = new RequiredVariantInputArgumentCollection();
 
     /**
      * Any variant which overlaps entries from the provided mask rod will be filtered. If the user wants logic to be reversed,
@@ -54,24 +61,24 @@ public class VariantFiltration extends RodWalker<Integer, Integer> {
      * Note that it is up to the user to adapt the name of the mask to make it clear that the reverse logic was used
      * (e.g. if masking against Hapmap, use -maskName=hapmap for the normal masking and -maskName=not_hapmap for the reverse masking).
      */
-    @Input(fullName="mask", shortName="mask", doc="Input ROD mask", required=false)
-    public RodBinding<Feature> mask;
+    @Argument(fullName="mask", shortName="mask", doc="Input ROD mask", optional=true)
+    public FeatureInput<Feature> mask;
 
-    @Output(doc="File to which variants should be written")
-    protected VariantContextWriter writer = null;
+    @Argument(doc="File to which variants should be written")
+    public VariantContextWriter writer = null;
 
     /**
      * VariantFiltration accepts any number of JEXL expressions (so you can have two named filters by using
      * --filterName One --filterExpression "X < 1" --filterName Two --filterExpression "X > 2").
      */
-    @Argument(fullName="filterExpression", shortName="filter", doc="One or more expression used with INFO fields to filter", required=false)
-    protected ArrayList<String> filterExpressions = new ArrayList<String>();
+    @Argument(fullName="filterExpression", shortName="filter", doc="One or more expression used with INFO fields to filter", optional=true)
+    public ArrayList<String> filterExpressions = new ArrayList<>(); //XXX htsjdk's API is bogus and wants an ArrayList
 
     /**
      * This name is put in the FILTER field for variants that get filtered.  Note that there must be a 1-to-1 mapping between filter expressions and filter names.
      */
-    @Argument(fullName="filterName", shortName="filterName", doc="Names to use for the list of filters", required=false)
-    protected ArrayList<String> filterNames = new ArrayList<String>();
+    @Argument(fullName="filterName", shortName="filterName", doc="Names to use for the list of filters", optional=true)
+    public ArrayList<String> filterNames = new ArrayList<>(); //XXX htsjdk's API is bogus and wants an ArrayList
 
     /**
      * Similar to the INFO field based expressions, but used on the FORMAT (genotype) fields instead.
@@ -80,29 +87,29 @@ public class VariantFiltration extends RodWalker<Integer, Integer> {
      * methods so that one can now filter out hets ("isHet == 1"), refs ("isHomRef == 1"), or homs ("isHomVar == 1"). Also available are
      * expressions isCalled, isNoCall, isMixed, and isAvailable, in accordance with the methods of the Genotype object.
      */
-    @Argument(fullName="genotypeFilterExpression", shortName="G_filter", doc="One or more expression used with FORMAT (sample/genotype-level) fields to filter (see documentation guide for more info)", required=false)
-    protected ArrayList<String> genotypeFilterExpressions = new ArrayList<String>();
+    @Argument(fullName="genotypeFilterExpression", shortName="G_filter", doc="One or more expression used with FORMAT (sample/genotype-level) fields to filter (see documentation guide for more info)", optional=true)
+    public ArrayList<String> genotypeFilterExpressions = new ArrayList<>();  //XXX htsjdk's API is bogus and wants an ArrayList
 
     /**
      * Similar to the INFO field based expressions, but used on the FORMAT (genotype) fields instead.
      */
-    @Argument(fullName="genotypeFilterName", shortName="G_filterName", doc="Names to use for the list of sample/genotype filters (must be a 1-to-1 mapping); this name is put in the FILTER field for variants that get filtered", required=false)
-    protected ArrayList<String> genotypeFilterNames = new ArrayList<String>();
+    @Argument(fullName="genotypeFilterName", shortName="G_filterName", doc="Names to use for the list of sample/genotype filters (must be a 1-to-1 mapping); this name is put in the FILTER field for variants that get filtered", optional=true)
+    public ArrayList<String> genotypeFilterNames = new ArrayList<>();   //XXX htsjdk's API is bogus and wants an ArrayList
 
     /**
      * Works together with the --clusterWindowSize argument.
      */
-    @Argument(fullName="clusterSize", shortName="cluster", doc="The number of SNPs which make up a cluster", required=false)
-    protected Integer clusterSize = 3;
+    @Argument(fullName="clusterSize", shortName="cluster", doc="The number of SNPs which make up a cluster", optional=true)
+    public Integer clusterSize = 3;
 
     /**
      * Works together with the --clusterSize argument.  To disable the clustered SNP filter, set this value to less than 1.
      */
-    @Argument(fullName="clusterWindowSize", shortName="window", doc="The window size (in bases) in which to evaluate clustered SNPs", required=false)
-    protected Integer clusterWindow = 0;
+    @Argument(fullName="clusterWindowSize", shortName="window", doc="The window size (in bases) in which to evaluate clustered SNPs", optional=true)
+    public Integer clusterWindow = 0;
 
-    @Argument(fullName="maskExtension", shortName="maskExtend", doc="How many bases beyond records from a provided 'mask' rod should variants be filtered", required=false)
-    protected Integer maskExtension = 0;
+    @Argument(fullName="maskExtension", shortName="maskExtend", doc="How many bases beyond records from a provided 'mask' rod should variants be filtered", optional=true)
+    public Integer maskExtension = 0;
 
     /**
      * When using the -mask argument, the maskName will be annotated in the variant record.
@@ -110,8 +117,8 @@ public class VariantFiltration extends RodWalker<Integer, Integer> {
      * it is up to the user to adapt the name of the mask to make it clear that the reverse logic was used
      * (e.g. if masking against Hapmap, use -maskName=hapmap for the normal masking and -maskName=not_hapmap for the reverse masking).
      */
-    @Argument(fullName="maskName", shortName="maskName", doc="The text to put in the FILTER field if a 'mask' rod is provided and overlaps with a variant call", required=false)
-    protected String maskName = "Mask";
+    @Argument(fullName="maskName", shortName="maskName", doc="The text to put in the FILTER field if a 'mask' rod is provided and overlaps with a variant call", optional=true)
+    public String maskName = "Mask";
 
     /**
      * By default, if the -mask argument is used, any variant falling in a mask will be filtered.
@@ -120,54 +127,195 @@ public class VariantFiltration extends RodWalker<Integer, Integer> {
      * Note that it is up to the user to adapt the name of the mask to make it clear that the reverse logic was used
      * (e.g. if masking against Hapmap, use -maskName=hapmap for the normal masking and -maskName=not_hapmap for the reverse masking).
      */
-    @Argument(fullName="filterNotInMask", shortName="filterNotInMask", doc="Filter records NOT in given input mask.", required=false)
-    protected boolean filterRecordsNotInMask = false;
+    @Argument(fullName="filterNotInMask", shortName="filterNotInMask", doc="Filter records NOT in given input mask.", optional=true)
+    public boolean filterRecordsNotInMask = false;
 
     /**
      * By default, if JEXL cannot evaluate your expression for a particular record because one of the annotations is not present, the whole expression evaluates as PASSing.
      * Use this argument to have it evaluate as failing filters instead for these cases.
      */
-    @Argument(fullName="missingValuesInExpressionsShouldEvaluateAsFailing", doc="When evaluating the JEXL expressions, missing values should be considered failing the expression", required=false)
-    protected Boolean failMissingValues = false;
+    @Argument(fullName="missingValuesInExpressionsShouldEvaluateAsFailing", doc="When evaluating the JEXL expressions, missing values should be considered failing the expression", optional=true)
+    public Boolean failMissingValues = false;
 
     /**
      * Invalidate previous filters applied to the VariantContext, applying only the filters here
      */
-    @Argument(fullName="invalidatePreviousFilters",doc="Remove previous filters applied to the VCF",required=false)
+    @Argument(fullName="invalidatePreviousFilters",doc="Remove previous filters applied to the VCF",optional=true)
     boolean invalidatePrevious = false;
 
     /**
      * Invert the selection criteria for --filterExpression
      */
-    @Argument(fullName="invertFilterExpression", shortName="invfilter", doc="Invert the selection criteria for --filterExpression", required=false)
-    protected boolean invertFilterExpression = false;
+    @Argument(fullName="invertFilterExpression", shortName="invfilter", doc="Invert the selection criteria for --filterExpression", optional=true)
+    public boolean invertFilterExpression = false;
 
     /**
      * Invert the selection criteria for --genotypeFilterExpression
      */
-    @Argument(fullName="invertGenotypeFilterExpression", shortName="invG_filter", doc="Invert the selection criteria for --genotypeFilterExpression", required=false)
-    protected boolean invertGenotypeFilterExpression = false;
+    @Argument(fullName="invertGenotypeFilterExpression", shortName="invG_filter", doc="Invert the selection criteria for --genotypeFilterExpression", optional=true)
+    public boolean invertGenotypeFilterExpression = false;
 
     /**
      * If this argument is provided, set filtered genotypes to no-call (./.).
      */
-    @Argument(fullName="setFilteredGtToNocall", required=false, doc="Set filtered genotypes to no-call")
+    @Argument(fullName="setFilteredGtToNocall", optional=true, doc="Set filtered genotypes to no-call")
     private boolean setFilteredGenotypesToNocall = false;
 
     // JEXL expressions for the filters
-    List<VariantContextUtils.JexlVCMatchExp> filterExps;
-    List<VariantContextUtils.JexlVCMatchExp> genotypeFilterExps;
+    private List<VariantContextUtils.JexlVCMatchExp> filterExps;
+    private List<VariantContextUtils.JexlVCMatchExp> genotypeFilterExps;
 
     public static final String CLUSTERED_SNP_FILTER_NAME = "SnpCluster";
     private ClusteredSnps clusteredSNPs = null;
-    private GenomeLoc previousMaskPosition = null;
+    private Locatable previousMaskPosition = null;
 
     // the structures necessary to initialize and maintain a windowed context
     private FiltrationContextWindow variantContextWindow;
     private static final int WINDOW_SIZE = 10;  // 10 variants on either end of the current one
-    private ArrayList<FiltrationContext> windowInitializer = new ArrayList<FiltrationContext>();
+    private List<FiltrationContext> windowInitializer = new ArrayList<>();
 
     private final List<Allele> diploidNoCallAlleles = Arrays.asList(Allele.NO_CALL, Allele.NO_CALL);
+
+    public static final class FiltrationContext {
+
+        private final ReferenceContext ref;
+        private VariantContext vc;
+
+        public FiltrationContext(final ReferenceContext ref, final VariantContext vc) {
+            this.ref = ref;
+            this.vc = vc;
+        }
+
+        public ReferenceContext getReferenceContext() { return ref; }
+
+        public VariantContext getVariantContext() { return vc; }
+
+        public void setVariantContext(final VariantContext newVC) { vc = newVC; }
+    }
+
+    private static final class ClusteredSnps {
+        private int window = 10;
+        private int snpThreshold = 3;
+
+        ClusteredSnps(final int snpThreshold, final int window) {
+            this.window = window;
+            this.snpThreshold = snpThreshold;
+            if ( window < 1 || snpThreshold < 1 ) {
+                throw new IllegalArgumentException("Window and threshold values need to be positive values");
+            }
+        }
+
+        public boolean filter(final FiltrationContextWindow contextWindow) {
+
+            final FiltrationContext[] variants = contextWindow.getWindow(snpThreshold-1, snpThreshold-1);
+            for (int i = 0; i < snpThreshold; i++) {
+                // ignore positions at the beginning or end of the overall interval (where there aren't enough records)
+                if ( variants[i] == null || variants[i+snpThreshold-1] == null ) {
+                    continue;
+                }
+
+                // note: the documentation tells users we'll blow up if ref calls are present.
+                //   if we ever get a windowed rod context that isn't a hack, we can actually allow this...
+                if ( !variants[i].getVariantContext().isVariant() ) {
+                    throw new UserException.BadInput("The clustered SNPs filter does not work in the presence of non-variant records; see the documentation for more details");
+                }
+
+                // find the nth variant
+                final Locatable left = GATKVariantContextUtils.getLocation(variants[i].getVariantContext());
+                Locatable right = null;
+                int snpsSeen = 1;
+
+                int currentIndex = i;
+                while ( ++currentIndex < variants.length ) {
+                    if ( variants[currentIndex] != null && variants[currentIndex].getVariantContext() != null && variants[currentIndex].getVariantContext().isVariant() ) {
+                        if ( ++snpsSeen == snpThreshold ) {
+                            right = GATKVariantContextUtils.getLocation(variants[currentIndex].getVariantContext());
+                            break;
+                        }
+                    }
+                }
+
+                if ( right != null &&
+                        left.getContig().equals(right.getContig()) &&
+                        Math.abs(right.getStart() - left.getStart()) <= window ) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    /**
+     * A window of variants surrounding the current variant being investigated
+     */
+    private static final class FiltrationContextWindow {
+
+        /**
+         * The variants.
+         */
+        private final LinkedList<FiltrationContext> window = new LinkedList<>();
+        private final int currentContext;
+
+        /**
+         * Contructor for a variant context.
+         * @param firstVariants  the first set of variants, comprising the right half of the window
+         */
+        FiltrationContextWindow(final List<VariantFiltration.FiltrationContext> firstVariants) {
+            final int windowSize = (firstVariants == null ? 1 : 2 * firstVariants.size() + 1);
+            currentContext = (firstVariants == null ? 0 : firstVariants.size());
+            window.addAll(firstVariants);
+            while ( window.size() < windowSize ) {
+                window.addFirst(null);
+            }
+        }
+
+        /**
+         * The context currently being examined.
+         * @return The current context.
+         */
+        public VariantFiltration.FiltrationContext getContext() {
+            return window.get(currentContext);
+        }
+
+        /**
+         * The maximum number of elements that can be requested on either end of the current context.
+         * @return max.
+         */
+        public int maxWindowElements() {
+            return currentContext;
+        }
+
+        /**
+         * The window around the context currently being examined.
+         * @param elementsToLeft number of earlier contexts to return ()
+         * @param elementsToRight number of later contexts to return   ()
+         * @return The current context window.
+         */
+        public VariantFiltration.FiltrationContext[] getWindow(final int elementsToLeft, final int elementsToRight) {
+            if ( elementsToLeft > maxWindowElements() || elementsToRight > maxWindowElements() ) {
+                throw new GATKException("Too large a window requested");
+            }
+            if ( elementsToLeft < 0 || elementsToRight < 0 ) {
+                throw new GATKException("Window size cannot be negative");
+            }
+
+            final VariantFiltration.FiltrationContext[] array = new VariantFiltration.FiltrationContext[elementsToLeft + elementsToRight + 1];
+            final ListIterator<VariantFiltration.FiltrationContext> iter = window.listIterator(currentContext - elementsToLeft);
+            for (int i = 0; i < elementsToLeft + elementsToRight + 1; i++) {
+                array[i] = iter.next();
+            }
+            return array;
+        }
+
+        /**
+         * Move the window along to the next context
+         * @param context The new rightmost context
+         */
+        public void moveWindow(final VariantFiltration.FiltrationContext context) {
+            window.removeFirst();
+            window.addLast(context);
+        }
+    }
 
     /**
      * Prepend inverse phrase to description if --invertFilterExpression
@@ -175,53 +323,59 @@ public class VariantFiltration extends RodWalker<Integer, Integer> {
      * @param description the description
      * @return the description with inverse prepended if --invert_filter_expression
      */
-    private String possiblyInvertFilterExpression( String description ){
-        if ( invertFilterExpression )
-            description = "Inverse of: " + description;
-        return description;
+    private String possiblyInvertFilterExpression( final String description ){
+        return invertFilterExpression ? "Inverse of: " + description : description;
     }
 
     private void initializeVcfWriter() {
 
-        final List<String> inputNames = Arrays.asList(variantCollection.variants.getName());
-
         // setup the header fields
-        Set<VCFHeaderLine> hInfo = new HashSet<VCFHeaderLine>();
-        hInfo.addAll(GATKVCFUtils.getHeaderFields(getToolkit(), inputNames));
+        final Set<VCFHeaderLine> hInfo = new HashSet<>();
+        hInfo.addAll(getHeaderForVariants().getMetaDataInSortedOrder());
 
-        if ( clusterWindow > 0 )
+        if ( clusterWindow > 0 ) {
             hInfo.add(new VCFFilterHeaderLine(CLUSTERED_SNP_FILTER_NAME, "SNPs found in clusters"));
+        }
 
-        if ( !genotypeFilterExps.isEmpty() )
+        if ( !genotypeFilterExps.isEmpty() ) {
             hInfo.add(VCFStandardHeaderLines.getFormatLine(VCFConstants.GENOTYPE_FILTER_KEY));
+        }
 
         try {
-            for ( VariantContextUtils.JexlVCMatchExp exp : filterExps )
+            for ( final VariantContextUtils.JexlVCMatchExp exp : filterExps ) {
                 hInfo.add(new VCFFilterHeaderLine(exp.name, possiblyInvertFilterExpression(exp.exp.toString())));
-            for ( VariantContextUtils.JexlVCMatchExp exp : genotypeFilterExps )
-                hInfo.add(new VCFFilterHeaderLine(exp.name, possiblyInvertFilterExpression(exp.exp.toString())));
-
-            if ( mask.isBound() ) {
-                if (filterRecordsNotInMask)
-                    hInfo.add(new VCFFilterHeaderLine(maskName, "Doesn't overlap a user-input mask"));
-                else hInfo.add(new VCFFilterHeaderLine(maskName, "Overlaps a user-input mask"));
             }
-        } catch (IllegalArgumentException e) {
+            for ( final VariantContextUtils.JexlVCMatchExp exp : genotypeFilterExps ) {
+                hInfo.add(new VCFFilterHeaderLine(exp.name, possiblyInvertFilterExpression(exp.exp.toString())));
+            }
+
+            if ( mask != null ) {
+                if (filterRecordsNotInMask) {
+                    hInfo.add(new VCFFilterHeaderLine(maskName, "Doesn't overlap a user-input mask"));
+                } else {
+                    hInfo.add(new VCFFilterHeaderLine(maskName, "Overlaps a user-input mask"));
+                }
+            }
+        } catch (final IllegalArgumentException e) {
             throw new UserException.BadInput(e.getMessage());
         }
 
-        writer.writeHeader(new VCFHeader(hInfo, SampleUtils.getUniqueSamplesFromRods(getToolkit(), inputNames)));
+        writer.writeHeader(new VCFHeader(hInfo, getHeaderForVariants().getGenotypeSamples()));
     }
 
-    public void initialize() {
-        if ( clusterWindow > 0 )
-            clusteredSNPs = new ClusteredSnps(getToolkit().getGenomeLocParser(),clusterSize, clusterWindow);
+    @Override
+    public void onTraversalStart() {
+        if ( clusterWindow > 0 ) {
+            clusteredSNPs = new ClusteredSnps(clusterSize, clusterWindow);
+        }
 
-        if ( maskExtension < 0 )
-             throw new UserException.BadArgumentValue("maskExtension", "negative values are not allowed");
+        if ( maskExtension < 0 ) {
+            throw new UserException.BadArgumentValue("maskExtension", "negative values are not allowed");
+        }
 
-        if (filterRecordsNotInMask && !mask.isBound())
-            throw new UserException.BadArgumentValue("filterNotInMask","argument not allowed if mask argument is not provided");
+        if (filterRecordsNotInMask && mask == null) {
+            throw new UserException.BadArgumentValue("filterNotInMask", "argument not allowed if mask argument is not provided");
+        }
         filterExps = VariantContextUtils.initializeMatchExps(filterNames, filterExpressions);
         genotypeFilterExps = VariantContextUtils.initializeMatchExps(genotypeFilterNames, genotypeFilterExpressions);
 
@@ -230,88 +384,87 @@ public class VariantFiltration extends RodWalker<Integer, Integer> {
         initializeVcfWriter();
     }
 
-    public Integer reduceInit() { return 0; }
+//    /**
+//     *
+//     * @param tracker  the meta-data tracker
+//     * @param ref      the reference base
+//     * @param context  the context for the given locus
+//     * @return 1 if the locus was successfully processed, 0 if otherwise
+//     */
+//    public Integer map(RefMetaDataTracker tracker, ReferenceContext ref, AlignmentContext context) {
 
-    /**
-     *
-     * @param tracker  the meta-data tracker
-     * @param ref      the reference base
-     * @param context  the context for the given locus
-     * @return 1 if the locus was successfully processed, 0 if otherwise
-     */
-    public Integer map(RefMetaDataTracker tracker, ReferenceContext ref, AlignmentContext context) {
-        if ( tracker == null )
-            return 0;
-
-        Collection<VariantContext> VCs = tracker.getValues(variantCollection.variants, context.getLocation());
+    @Override
+    public void apply(final VariantContext variant, final ReadsContext readsContext, final ReferenceContext ref, final FeatureContext featureContext) {
 
         // is there a SNP mask present?
-        boolean hasMask = (tracker.hasValues(mask) && !filterRecordsNotInMask) || (filterRecordsNotInMask && !tracker.hasValues(mask));
-        if ( hasMask )
-            previousMaskPosition = ref.getLocus();  // multi-base masks will get triggered over all bases of the mask
-
-        for ( VariantContext vc : VCs ) {
-
-            if ( invalidatePrevious ) {
-                vc = (new VariantContextBuilder(vc)).filters(new HashSet<String>()).make();
-            }
-
-            // filter based on previous mask position
-            vc = addMaskIfCoversVariant(vc, previousMaskPosition, maskName, maskExtension, false);
-
-            FiltrationContext varContext = new FiltrationContext(ref, vc);
-
-            // if we're still initializing the context, do so
-            if ( windowInitializer != null ) {
-
-                // if this is a mask position, filter previous records
-                if ( hasMask ) {
-                    for ( FiltrationContext prevVC : windowInitializer )
-                        prevVC.setVariantContext(addMaskIfCoversVariant(prevVC.getVariantContext(), ref.getLocus(), maskName, maskExtension, true));
-                }
-
-                windowInitializer.add(varContext);
-                if ( windowInitializer.size() == WINDOW_SIZE ) {
-                    variantContextWindow = new FiltrationContextWindow(windowInitializer);
-                    windowInitializer = null;
-                }
-            } else {
-
-                // if this is a mask position, filter previous records
-                if ( hasMask ) {
-                    for ( FiltrationContext prevVC : variantContextWindow.getWindow(10, 10) ) {
-                        if ( prevVC != null )
-                            prevVC.setVariantContext(addMaskIfCoversVariant(prevVC.getVariantContext(), ref.getLocus(), maskName, maskExtension, true));
-                    }
-                }
-
-                variantContextWindow.moveWindow(varContext);
-                filter();
-            }
+        final boolean hasMask = featureContext.getValues(mask).isEmpty() == filterRecordsNotInMask;
+        if ( hasMask ) {
+            previousMaskPosition = ref.getInterval();  // multi-base masks will get triggered over all bases of the mask
         }
 
-        return 1;
+        final VariantContext vc1;
+        if (invalidatePrevious) {
+            vc1 = (new VariantContextBuilder(variant)).filters(new HashSet<>()).make();
+        } else {
+            vc1 = variant;
+        }
+
+        // filter based on previous mask position
+        final VariantContext vc = addMaskIfCoversVariant(vc1, previousMaskPosition, maskName, maskExtension, false);
+
+        final FiltrationContext varContext = new FiltrationContext(ref, vc);
+
+        // if we're still initializing the context, do so
+        if ( windowInitializer != null ) {
+
+            // if this is a mask position, filter previous records
+            if ( hasMask ) {
+                for ( final FiltrationContext prevVC : windowInitializer ) {
+                    prevVC.setVariantContext(addMaskIfCoversVariant(prevVC.getVariantContext(), ref.getInterval(), maskName, maskExtension, true));
+                }
+            }
+
+            windowInitializer.add(varContext);
+            if ( windowInitializer.size() == WINDOW_SIZE ) {
+                variantContextWindow = new FiltrationContextWindow(windowInitializer);
+                windowInitializer = null;
+            }
+        } else {
+
+            // if this is a mask position, filter previous records
+            if ( hasMask ) {
+                for ( final FiltrationContext prevVC : variantContextWindow.getWindow(10, 10) ) {
+                    if ( prevVC != null ) {
+                        prevVC.setVariantContext(addMaskIfCoversVariant(prevVC.getVariantContext(), ref.getInterval(), maskName, maskExtension, true));
+                    }
+                }
+            }
+
+            variantContextWindow.moveWindow(varContext);
+            filter();
+        }
     }
 
     /**
      * Helper function to check if a mask covers the variant location.
      *
      * @param vc variant context
-     * @param genomeLoc genome location
+     * @param locatation genome location
      * @param maskName name of the mask
      * @param maskExtension bases beyond the mask
      * @param vcBeforeLoc if true, variant context is before the genome location; if false, the converse is true.
      * @return true if the genome location is within the extended mask area, false otherwise
      */
-    protected static boolean doesMaskCoverVariant(VariantContext vc, GenomeLoc genomeLoc, String maskName, int maskExtension, boolean vcBeforeLoc) {
-        boolean logic = genomeLoc != null &&                                        // have a location
-                genomeLoc.getContig().equals(vc.getChr()) &&                        // it's on the same contig
+    static boolean doesMaskCoverVariant(final VariantContext vc, final Locatable locatation, final String maskName, final int maskExtension, final boolean vcBeforeLoc) {
+        final boolean logic = locatation != null &&                                        // have a location
+                locatation.getContig().equals(vc.getContig()) &&                        // it's on the same contig
                 (vc.getFilters() == null || !vc.getFilters().contains(maskName));   // the filter hasn't already been applied
         if ( logic ) {
-            if (vcBeforeLoc)
-                return genomeLoc.getStart() - vc.getEnd() <= maskExtension;  // it's within the mask area (multi-base VCs that overlap this site will always give a negative distance)
-            else
-                return vc.getStart() - genomeLoc.getStop() <= maskExtension;
+            if (vcBeforeLoc) {
+                return locatation.getStart() - vc.getEnd() <= maskExtension;  // it's within the mask area (multi-base VCs that overlap this site will always give a negative distance)
+            } else {
+                return vc.getStart() - locatation.getEnd() <= maskExtension;
+            }
         } else {
             return false;
         }
@@ -321,15 +474,15 @@ public class VariantFiltration extends RodWalker<Integer, Integer> {
      * Add mask to variant context filters if it covers the it's location
      *
      * @param vc VariantContext
-     * @param genomeLoc genome location
+     * @param location genome location
      * @param maskName name of the mask
      * @param maskExtension bases beyond the mask
      * @param locStart if true, start at genome location and end at VariantContext. If false, do the opposite.
      * @return VariantContext with the mask added if the VariantContext is within the extended mask area
      */
-    private VariantContext addMaskIfCoversVariant(VariantContext vc, GenomeLoc genomeLoc, String maskName, int maskExtension, boolean locStart) {
-        if (doesMaskCoverVariant(vc, genomeLoc, maskName, maskExtension, locStart) ) {
-            Set<String> filters = new LinkedHashSet<String>(vc.getFilters());
+    private static VariantContext addMaskIfCoversVariant(VariantContext vc, final Locatable location, final String maskName, final int maskExtension, final boolean locStart) {
+        if (doesMaskCoverVariant(vc, location, maskName, maskExtension, locStart) ) {
+            final Set<String> filters = new LinkedHashSet<>(vc.getFilters());
             filters.add(maskName);
             vc = new VariantContextBuilder(vc).filters(filters).make();
         }
@@ -339,7 +492,7 @@ public class VariantFiltration extends RodWalker<Integer, Integer> {
 
     private void filter() {
         // get the current context
-        FiltrationContext context = variantContextWindow.getContext();
+        final FiltrationContext context = variantContextWindow.getContext();
         if ( context == null )
             return;
 
@@ -348,25 +501,29 @@ public class VariantFiltration extends RodWalker<Integer, Integer> {
 
         // make new Genotypes based on filters
         if ( !genotypeFilterExps.isEmpty() || setFilteredGenotypesToNocall ) {
-            GenotypesContext genotypes = GenotypesContext.create(vc.getGenotypes().size());
+            final GenotypesContext genotypes = GenotypesContext.create(vc.getGenotypes().size());
 
             // for each genotype, check filters then create a new object
             for ( final Genotype g : vc.getGenotypes() ) {
                 if ( g.isCalled() ) {
                     final List<String> filters = new ArrayList<>();
-                    if ( g.isFiltered() ) filters.add(g.getFilters());
+                    if ( g.isFiltered() ) {
+                        filters.add(g.getFilters());
+                    }
 
                     // Add if expression filters the variant context
                     for ( VariantContextUtils.JexlVCMatchExp exp : genotypeFilterExps ) {
-                        if ( Utils.invertLogic(VariantContextUtils.match(vc, g, exp), invertGenotypeFilterExpression) )
+                        if ( Utils.invertLogic(VariantContextUtils.match(vc, g, exp), invertGenotypeFilterExpression) ) {
                             filters.add(exp.name);
+                        }
                     }
 
                     // if sample is filtered and --setFilteredGtToNocall, set genotype to non-call
-                    if ( !filters.isEmpty() && setFilteredGenotypesToNocall )
+                    if ( !filters.isEmpty() && setFilteredGenotypesToNocall ) {
                         genotypes.add(new GenotypeBuilder(g).filters(filters).alleles(diploidNoCallAlleles).make());
-                    else
+                    } else {
                         genotypes.add(new GenotypeBuilder(g).filters(filters).make());
+                    }
                 } else {
                     genotypes.add(g);
                 }
@@ -376,46 +533,52 @@ public class VariantFiltration extends RodWalker<Integer, Integer> {
         }
 
         // make a new variant context based on filters
-        Set<String> filters = new LinkedHashSet<>(vc.getFilters());
+        final Set<String> filters = new LinkedHashSet<>(vc.getFilters());
 
         // test for clustered SNPs if requested
-        if ( clusteredSNPs != null && clusteredSNPs.filter(variantContextWindow) )
+        if ( clusteredSNPs != null && clusteredSNPs.filter(variantContextWindow) ) {
             filters.add(CLUSTERED_SNP_FILTER_NAME);
+        }
 
-        for ( VariantContextUtils.JexlVCMatchExp exp : filterExps ) {
+        for ( final VariantContextUtils.JexlVCMatchExp exp : filterExps ) {
             try {
-                if ( Utils.invertLogic(VariantContextUtils.match(vc, exp), invertFilterExpression) )
+                if ( Utils.invertLogic(VariantContextUtils.match(vc, exp), invertFilterExpression) ) {
                     filters.add(exp.name);
-            } catch (Exception e) {
+                }
+            } catch (final Exception e) {
                 // do nothing unless specifically asked to; it just means that the expression isn't defined for this context
-                if ( failMissingValues  )
-                    filters.add(exp.name);                         
+                if ( failMissingValues  ) {
+                    filters.add(exp.name);
+                }
             }
         }
 
-        if ( filters.isEmpty() )
+        if ( filters.isEmpty() ) {
             builder.passFilters();
-        else
+        } else {
             builder.filters(filters);
+        }
 
         writer.add(builder.make());
     }
 
     /**
      * Tell the user the number of loci processed and close out the new variants file.
-     *
-     * @param result  the number of loci seen.
      */
-    public void onTraversalDone(Integer result) {
+    @Override
+    public Object onTraversalDone() {
         // move the window over so that we can filter the last few variants
         if ( windowInitializer != null ) {
-            while ( windowInitializer.size() < WINDOW_SIZE )
+            while ( windowInitializer.size() < WINDOW_SIZE ) {
                 windowInitializer.add(null);
+            }
             variantContextWindow = new FiltrationContextWindow(windowInitializer);
         }
         for (int i=0; i < WINDOW_SIZE; i++) {
             variantContextWindow.moveWindow(null);
             filter();
         }
+        return null;
     }
+
 }

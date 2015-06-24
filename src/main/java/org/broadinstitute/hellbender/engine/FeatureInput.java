@@ -2,6 +2,7 @@ package org.broadinstitute.hellbender.engine;
 
 import htsjdk.tribble.Feature;
 import org.broadinstitute.hellbender.exceptions.UserException;
+import org.broadinstitute.hellbender.utils.Utils;
 
 import java.io.File;
 import java.util.Collections;
@@ -74,7 +75,7 @@ public final class FeatureInput<T extends Feature> {
      * May have attributes.
      */
     private static final class ParsedArgument{
-        private final HashMap<String, String> keyValueMap;
+        private final Map<String, String> keyValueMap;
         private final String name;
         private final File file;
 
@@ -98,7 +99,7 @@ public final class FeatureInput<T extends Feature> {
             if ( tokens.length > 2 || tokens.length == 0 ) {
                 throw new UserException.BadArgumentValue("", rawArgumentValue, usage);
             }
-            for ( String token : tokens ) {
+            for ( final String token : tokens ) {
                 if ( token.isEmpty() ) {
                     throw new UserException.BadArgumentValue("", rawArgumentValue, "Empty name/file encountered. " + usage);
                 }
@@ -118,10 +119,10 @@ public final class FeatureInput<T extends Feature> {
             if (subtokens[0].isEmpty()){
                 throw new UserException.BadArgumentValue("", rawArgumentValue, usage);
             }
-            ParsedArgument pa= new ParsedArgument(subtokens[0], new File(tokens[1]));
+            final ParsedArgument pa= new ParsedArgument(subtokens[0], new File(tokens[1]));
             //note: starting from 1 because 0 is the name
             for (int i = 1; i < subtokens.length; i++){
-                String[] kv = subtokens[i].split(FEATURE_ARGUMENT_KEY_VALUE_SEPARATOR, -1);
+                final String[] kv = subtokens[i].split(FEATURE_ARGUMENT_KEY_VALUE_SEPARATOR, -1);
                 if (kv.length != 2 || kv[0].isEmpty() || kv[1].isEmpty()){
                     throw new UserException.BadArgumentValue("", rawArgumentValue, usage);
                 }
@@ -133,7 +134,7 @@ public final class FeatureInput<T extends Feature> {
             return pa;
         }
 
-        private ParsedArgument(String name, File file) {
+        private ParsedArgument(final String name, final File file) {
             this.name=name;
             this.file=file;
             this.keyValueMap = new HashMap<>(2);
@@ -154,11 +155,11 @@ public final class FeatureInput<T extends Feature> {
             return Collections.unmodifiableMap(keyValueMap);
         }
 
-        public void addKeyValue(String k, String v) {
+        public void addKeyValue(final String k, final String v) {
             keyValueMap.put(k, v);
         }
 
-        private boolean containsKey(String k) {
+        private boolean containsKey(final String k) {
             return keyValueMap.containsKey(k);
         }
     }
@@ -171,7 +172,7 @@ public final class FeatureInput<T extends Feature> {
      *
      * @param rawArgumentValue String of the form "logical_name:feature_file" or "feature_file"
      */
-    protected FeatureInput( final String rawArgumentValue ) {
+    FeatureInput( final String rawArgumentValue ) {
         final ParsedArgument parsedArgument = ParsedArgument.of(rawArgumentValue);
 
         name = parsedArgument.getName();
@@ -185,10 +186,8 @@ public final class FeatureInput<T extends Feature> {
      * if no value is associated with a given key.
      * @throws IllegalArgumentException if the key is {@code null}.
      */
-    public String getAttribute(String key) {
-        if (key == null){
-            throw new IllegalArgumentException("null key");
-        }
+    public String getAttribute(final String key) {
+        Utils.nonNull(key);
         return kevValueMap.get(key);
     }
 
@@ -217,7 +216,7 @@ public final class FeatureInput<T extends Feature> {
      *
      * @return the type of Feature contained in our file
      */
-    public final Class<? extends Feature> getFeatureType() {
+    public Class<? extends Feature> getFeatureType() {
         return featureType;
     }
 
@@ -226,7 +225,7 @@ public final class FeatureInput<T extends Feature> {
      *
      * @param featureType the type of Feature contained in our file
      */
-    public void setFeatureType( Class<? extends Feature> featureType ) {
+    public void setFeatureType( final Class<? extends Feature> featureType ) {
         this.featureType = featureType;
     }
 
@@ -247,12 +246,12 @@ public final class FeatureInput<T extends Feature> {
      * @return true if this FeatureInput equals other, otherwise false
      */
     @Override
-    public boolean equals( Object other ) {
+    public boolean equals( final Object other ) {
         if (! (other instanceof FeatureInput) ) {
             return false;
         }
 
-        FeatureInput<?> otherFeature = (FeatureInput<?>)other;
+        final FeatureInput<?> otherFeature = (FeatureInput<?>)other;
         return name.equals(otherFeature.name) && featureFile.equals(otherFeature.featureFile);
     }
 

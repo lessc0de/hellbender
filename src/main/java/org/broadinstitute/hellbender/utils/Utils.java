@@ -455,4 +455,15 @@ public final class Utils {
             return file;
         }
     }
+
+    /**
+     * Invert logic if specified
+     *
+     * @param logic boolean logical operation value
+     * @param invert whether to invert logic
+     * @return invert logic if invert flag is true, otherwise leave the logic
+     */
+    public static boolean invertLogic(final boolean logic, final boolean invert){
+        return invert ? !logic : logic;
+    }
 }

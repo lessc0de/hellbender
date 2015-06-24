@@ -69,7 +69,7 @@ public abstract class VariantWalker extends GATKTool {
      */
     @Override
     public void traverse() {
-        VariantFilter filter = makeVariantFilter();
+        final VariantFilter filter = makeVariantFilter();
         // Process each variant in the input stream.
         StreamSupport.stream(drivingVariants.spliterator(), false)
                 .filter(filter)
@@ -88,7 +88,7 @@ public abstract class VariantWalker extends GATKTool {
      * @return VCFHeader for our driving source of variants
      */
     public VCFHeader getHeaderForVariants() {
-        Object header = drivingVariants.getHeader();
+        final Object header = drivingVariants.getHeader();
 
         if ( ! (header instanceof VCFHeader) ) {
             throw new GATKException("Header for " + drivingVariantFile.getAbsolutePath() + " is not in VCF header format");

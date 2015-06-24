@@ -92,7 +92,7 @@ import java.util.*;
         programGroup = VariantProgramGroup.class
 )
 public final class ValidateVariants extends VariantWalker {
-    final protected static Logger logger = LogManager.getLogger(ValidateVariants.class);
+    final static Logger logger = LogManager.getLogger(ValidateVariants.class);
 
     public enum ValidationType {
 
@@ -165,7 +165,7 @@ public final class ValidateVariants extends VariantWalker {
     }
 
     @Override
-    public void apply(VariantContext vc, ReadsContext readsContext, ReferenceContext ref, FeatureContext featureContext) {
+    public void apply(final VariantContext vc, final ReadsContext readsContext, final ReferenceContext ref, final FeatureContext featureContext) {
         if ( DO_NOT_VALIDATE_FILTERED && vc.isFiltered() )
             return;
 
